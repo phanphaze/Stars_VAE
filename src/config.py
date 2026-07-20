@@ -4,7 +4,7 @@ from pathlib import Path
 # Hyperparameters
 
 # rdp preprocessing attributes
-profile_features = ['mass', 'logP', 'logT'] #features to be used for training
+profile_features = ['mass', 'logP', 'logT', 'Lumuniosity'] #features to be used for training
 split_feature = 'star_age'
 num_profile_points = 60
 

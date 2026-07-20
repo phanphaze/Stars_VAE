@@ -1,6 +1,7 @@
 #  To install new packages, use command: conda env update --file environment.yml --prune
 name: sse_vae_env
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
