@@ -1,0 +1,22 @@
+name: stellar_structure_vae_env
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - jupyterlab
+  - notebook
+  - ipykernel
+  - pytorch
+  - torchvision
+  - pip:
+      - kagglehub
