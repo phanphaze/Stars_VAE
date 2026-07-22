@@ -1,9 +1,15 @@
+#  To install new packages, use command: conda env update --file environment.yml --prune
 name: sse_vae_env
 channels:
   - defaults
 dependencies:
+  - python=3.10
   - numpy
   - pandas
-  - pytorch
   - matplotlib
-  - scikit-learn
+  - jupyter
+  - pip
+  - pip:
+    - --extra-index-url https://download.pytorch.org/whl/cu126
+    - torch
+    - torchvision
