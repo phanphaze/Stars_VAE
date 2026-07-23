@@ -76,3 +76,29 @@ def transform_with_scalers(
         values = values.fillna(values.median())
         working_df[[feature]] = scaler.transform(values.to_frame())
     return working_df
+
+# Return a simplified DataFrame with rows selected by the Ramer-Douglas-Peucker algorithm.
+def rdp(
+    df: pd.DataFrame,
+    features: Optional[list[str]] = None,
+    epsilon: float = 1.0,
+) -> pd.DataFrame:
+    if features is None:
+        features = numeric_features(df)
+
+    working_df = drop_constant_columns(df.copy())
+    selected_features = [feature for feature in features if feature in working_df.columns]
+    if not selected_features or len(working_df) < 3:
+        return working_df
+
+    points = (
+        working_df[selected_features]
+        .apply(pd.to_numeric, errors="coerce")
+        .astype(float)
+        .fillna(lambda col: col.median())
+    )
+    points = points.fillna(points.median(axis=0))
+
+    indices = _rdp_indices(points.to_numpy(), epsilon)
+    simplified_df = working_df.iloc[indices].reset_index(drop=True)
+    return simplified_df
