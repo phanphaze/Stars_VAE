@@ -8,9 +8,11 @@ dependencies:
   - numpy
   - pandas
   - matplotlib
+  - plotly
+  - seaborn
+  - SciencePlots
   - jupyter
   - pip
-  - SciencePlots
   - scikit-learn
   - pip:
     - --extra-index-url https://download.pytorch.org/whl/cu126
