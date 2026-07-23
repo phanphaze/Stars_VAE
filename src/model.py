@@ -5,14 +5,14 @@ import torch.nn as nn
 from src.config import latent_dimension_size
 
 
-class CVAE(nn.Module):
+class CAE(nn.Module): #Conditional Autoencoder
     def __init__(
         self,
         input_dim: int,
         condition_dim: int,
         latent_dim: int = latent_dimension_size,
     ):
-        super(CVAE, self).__init__()
+        super(CAE, self).__init__()
 
         self.input_dim = input_dim
         self.condition_dim = condition_dim
