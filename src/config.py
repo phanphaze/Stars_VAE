@@ -7,6 +7,8 @@ batch_size = 32
 num_epochs = 50
 train_test_split = 0.7
 
+input_dimension_size = 2
+output_dimension_size = 1
 latent_dimension_size = 4
 beta_value = 2 #weight of KL divergence
 
