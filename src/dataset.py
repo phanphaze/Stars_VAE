@@ -46,7 +46,7 @@ def load_processed_data(path: Path | str = processed_data_path) -> np.ndarray:
     return np.load(path)
 
 
-def create_dataloaders(
+def get_dataloaders(
     data: Optional[np.ndarray] = None,
     processed_data_path: Path | str = processed_data_path,
     condition_cols: Optional[Sequence[int]] = None,
