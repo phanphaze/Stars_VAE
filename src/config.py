@@ -10,6 +10,10 @@ num_epochs = 50
 train_test_split = 0.8
 beta_value = 2 #weight of KL divergence
 
+# early stopping attributes
+early_stopping_patience = 3
+early_stopping_min_delta = 1e-4
+
 # model attributes
 input_dimension_size = 2
 output_dimension_size = 1
