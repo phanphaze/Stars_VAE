@@ -11,8 +11,8 @@ train_test_split = 0.8
 beta_value = 2 #weight of KL divergence
 
 # early stopping attributes
-early_stopping_patience = 3
-early_stopping_min_delta = 1e-4
+early_stopping_patience = 3 #number of epochs to wait for improvement before stopping
+early_stopping_min_delta = 1e-4 #minimum change in loss to qualify as an improvement
 
 # model attributes
 input_dimension_size = 2
