@@ -3,6 +3,9 @@
 import torch
 import torch.nn as nn
 from src.config import latent_dimension_size
+from torchvision import datasets 
+from tqdm import tqdm 
+from torchvision import transforms 
 
 class VAE(nn.Module):  # Variational Autoencoder
     def __init__(
@@ -63,11 +66,6 @@ class VAE(nn.Module):  # Variational Autoencoder
         z = self.reparameterize(mu, logvar)
         decoded = self.decode(z)
         return decoded, mu, logvar
-
-
-class CVAE(VAE):
-    pass
-
 
 class CAE(nn.Module):  # Conditional Autoencoder
     def __init__(
@@ -135,3 +133,4 @@ class CAE(nn.Module):  # Conditional Autoencoder
         z = self.reparameterize(mu, logvar)
         decoded = self.decode(z, c)
         return decoded, mu, logvar
+
