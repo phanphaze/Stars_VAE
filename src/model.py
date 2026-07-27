@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from src.config import latent_dimension_size
 from torchvision import datasets 
-from tqdm import tqdm 
 from torchvision import transforms 
 
 class VAE(nn.Module):  # Variational Autoencoder
@@ -12,7 +11,7 @@ class VAE(nn.Module):  # Variational Autoencoder
         self,
         input_dim: int = 2,
         latent_dim: int = latent_dimension_size
-    ):
+    ):  
         super(VAE, self).__init__()
 
         self.input_dim = input_dim

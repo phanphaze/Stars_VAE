@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import Optional
-
+import numpy as np
 import pandas as pd
+
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Return a summary of missing and null values in a DataFrame.
@@ -102,3 +103,46 @@ def rdp(
     indices = _rdp_indices(points.to_numpy(), epsilon)
     simplified_df = working_df.iloc[indices].reset_index(drop=True)
     return simplified_df
+
+def _rdp_indices(points: np.ndarray, epsilon: float) -> list[int]:
+    """
+    Calculates indices for N-dimensional data simplification using the 
+    Ramer-Douglas-Peucker algorithm.
+    """
+    start = 0
+    end = len(points) - 1
+    
+    if end <= 0:
+        return [start]
+        
+    a = points[start]
+    b = points[end]
+    ab = b - a
+    norm_ab = np.linalg.norm(ab)
+    
+    # Calculate perpendicular distances from all points to the line connecting start and end
+    if norm_ab == 0.0:
+        distances = np.linalg.norm(points - a, axis=1)
+    else:
+        u = ab / norm_ab
+        ap = points - a
+        # Vectorized projection for N-dimensional points
+        projections = np.outer(np.dot(ap, u), u)
+        distances = np.linalg.norm(ap - projections, axis=1)
+        
+    # Find the point furthest from the line segment
+    dmax = 0.0
+    index = 0
+    if end > 1:
+        dmax = np.max(distances[1:end])
+        index = np.argmax(distances[1:end]) + 1
+        
+    # Recursively simplify if the max distance is greater than the epsilon threshold
+    if dmax > epsilon:
+        left_indices = _rdp_indices(points[:index+1], epsilon)
+        right_indices = _rdp_indices(points[index:], epsilon)
+        
+        # Combine indices while avoiding duplicating the pivot point
+        return left_indices[:-1] + [i + index for i in right_indices]
+    else:
+        return [start, end]
