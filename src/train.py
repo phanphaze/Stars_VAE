@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.dataset import get_dataloaders
-from src.model import CVAE, VAE
+from src.model import CAE, VAE
 from src.utils import save_model
 import src.config as config
 
@@ -22,7 +22,7 @@ def vae_loss_function(reconstructed, original, mu, logvar, beta=config.beta_valu
 
 
 def train_model(model="VAE"):
-    train_loader, val_loader = get_dataloaders()
+    train_loader, val_loader, test_loader = get_dataloaders()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
 
@@ -30,7 +30,7 @@ def train_model(model="VAE"):
     if model == "VAE":
         model = VAE().to(device)
     else:
-        model = CVAE().to(device)
+        model = CAE().to(device)
     print(f"Model: {model}")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config.Learning_rate)

@@ -2,21 +2,21 @@
 
 import torch
 import torch.nn as nn
-from src.config import latent_dimension_size
+from src.config import latent_dimension_size, input_dimension_size, output_dimension_size
 from torchvision import datasets 
 from torchvision import transforms 
 
 class VAE(nn.Module):  # Variational Autoencoder
     def __init__(
         self,
-        input_dim: int = 2,
-        latent_dim: int = latent_dimension_size
-    ):  
+        input_dim: int = input_dimension_size,
+        latent_dim: int = latent_dimension_size,
+        output_dim: int = output_dimension_size    
+    ):
         super(VAE, self).__init__()
-
         self.input_dim = input_dim
         self.latent_dim = latent_dim
-
+        self.output_dim = output_dim
         hidden_dim = max(self.input_dim * 2, 256)
 
         self.encoder = nn.Sequential(
@@ -28,7 +28,7 @@ class VAE(nn.Module):  # Variational Autoencoder
             nn.BatchNorm1d(hidden_dim // 2),
             nn.LeakyReLU(0.2),
         )
-
+        
         self.fc_mu = nn.Linear(hidden_dim // 2, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim // 2, latent_dim)
 
@@ -40,23 +40,23 @@ class VAE(nn.Module):  # Variational Autoencoder
             nn.Linear(hidden_dim // 2, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, self.input_dim),
+            nn.Linear(hidden_dim, output_dim),
         )
 
     def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
-
+    
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden = self.encoder(x)
         mu = self.fc_mu(hidden)
         logvar = self.fc_logvar(hidden)
         return mu, logvar
-
+    
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         return self.decoder(z)
-
+    
     def forward(
         self,
         x: torch.Tensor,
@@ -65,6 +65,7 @@ class VAE(nn.Module):  # Variational Autoencoder
         z = self.reparameterize(mu, logvar)
         decoded = self.decode(z)
         return decoded, mu, logvar
+
 
 class CAE(nn.Module):  # Conditional Autoencoder
     def __init__(

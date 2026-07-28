@@ -87,13 +87,12 @@ def rdp(
     if features is None:
         features = numeric_features(df)
 
-    working_df = drop_constant_columns(df.copy())
-    selected_features = [feature for feature in features if feature in working_df.columns]
-    if not selected_features or len(working_df) < 3:
-        return working_df
+    selected_features = [feature for feature in features if feature in df.columns]
+    if not selected_features or len(df) < 3:
+        return df
 
     points = (
-        working_df[selected_features]
+        df[selected_features]
         .apply(pd.to_numeric, errors="coerce")
         .astype(float)
         .fillna(lambda col: col.median())
@@ -101,7 +100,7 @@ def rdp(
     points = points.fillna(points.median(axis=0))
 
     indices = _rdp_indices(points.to_numpy(), epsilon)
-    simplified_df = working_df.iloc[indices].reset_index(drop=True)
+    simplified_df = df.iloc[indices].reset_index(drop=True)
     return simplified_df
 
 def _rdp_indices(points: np.ndarray, epsilon: float) -> list[int]:

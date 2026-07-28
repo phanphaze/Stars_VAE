@@ -3,6 +3,10 @@ from pathlib import Path
 
 # Hyperparameters
 
+# preprocessing attributes
+rdp_epsilon = 0.05 #epsilon value for Ramer-Douglas-Peucker algorithm
+target_features = ['mass', 'logT'] #features to be used for training
+
 # train attributes
 Learning_rate = 1e-4
 batch_size = 32
@@ -16,7 +20,7 @@ early_stopping_min_delta = 1e-4 #minimum change in loss to qualify as an improve
 
 # model attributes
 input_dimension_size = 2
-output_dimension_size = 1
+output_dimension_size = 2
 latent_dimension_size = 4
 
 
