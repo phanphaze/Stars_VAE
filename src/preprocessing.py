@@ -38,7 +38,7 @@ def fit_preprocess_scalers(
     if features is None:
         features = numeric_features(df)
 
-    working_df = drop_constant_columns(df.copy())
+    working_df = df.copy()
     scalers: dict[str, object] = {}
 
     for feature in features:
