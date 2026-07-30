@@ -201,7 +201,7 @@ def iterative_rdp_max_heap(points, original_indices, target_num_points):
     sorted_selected = sorted(list(selected_indices))
     return original_indices[sorted_selected]
 
-def rdp_preprocess(raw_df, split_feature=split_feature, profile_features=profile_features, num_profile_points=num_profile_points):
+def rdp_preprocess(raw_df, num_profile_points=num_profile_points, split_feature=split_feature, profile_features=profile_features):
     # Normalized minmax scaled (between 0 & 1)
     normalized_df, _ = fit_preprocess_scalers(raw_df, profile_features + [split_feature], True, False)    
     # Stratify data into profiles based on a split feature
