@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import heapq
 from src.config import num_profile_points, split_feature, profile_features
-from src.preprocessing import fit_preprocess_scalers, process_simulation
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Return a summary of missing and null values in a DataFrame.
 def check_missing_values(df: pd.DataFrame) -> pd.DataFrame:
@@ -100,16 +100,16 @@ def process_simulation(sim):
     for i, start in enumerate(zone_starts):
         if i < len(zone_starts) - 1:
             profiles.append(
-                sim[start:zone_starts[i + 1]] # getting zones belonging to profile
+                sim.iloc[start:zone_starts[i + 1]] # getting zones belonging to profile
             )
 
         else:
             profiles.append(
-                sim[start:] # edge case for last zone
+                sim.iloc[start:] # edge case for last zone
             )
 
         ages.append(
-            sim[start]["star_age"] # collecting ages
+            sim.iloc[start]["star_age"] # collecting ages
         )
 
     ages = np.array(ages)
@@ -121,6 +121,7 @@ def process_simulation(sim):
     ages = ages[ordered_inds]
 
     return ages, profiles
+
 
 # Return a simplified DataFrame with rows selected by the Ramer-Douglas-Peucker algorithm.
 def get_max_perpendicular_distance(points, start_idx, end_idx):
@@ -202,11 +203,10 @@ def iterative_rdp_max_heap(points, original_indices, target_num_points):
 
 def rdp_preprocess(raw_df, split_feature=split_feature, profile_features=profile_features, num_profile_points=num_profile_points):
     # Normalized minmax scaled (between 0 & 1)
-    normalized_df = fit_preprocess_scalers(raw_df, profile_features + [split_feature], True, False)
-    
+    normalized_df, _ = fit_preprocess_scalers(raw_df, profile_features + [split_feature], True, False)    
     # Stratify data into profiles based on a split feature
     # Expected output: lists of DataFrames (profiles) retaining original indices, and their split values
-    profiles, splitting_features = process_simulation(normalized_df)
+    splitting_features, profiles = process_simulation(normalized_df)
 
     # Determine which profile has the minimum number of points
     min_points = min([len(p) for p in profiles])

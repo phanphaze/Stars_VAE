@@ -4,7 +4,6 @@ from pathlib import Path
 # Hyperparameters
 
 # rdp preprocessing attributes
-rdp_epsilon = 0.05 #epsilon value for Ramer-Douglas-Peucker algorithm
 profile_features = ['mass', 'logT'] #features to be used for training
 split_feature = 'star_age'
 num_profile_points = 60
