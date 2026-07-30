@@ -9,15 +9,15 @@ split_feature = 'star_age'
 num_profile_points = 60
 
 # train attributes
-Learning_rate = 1e-4
+Learning_rate = 1e-5
 batch_size = 32
-num_epochs = 50
+num_epochs = 2000
 train_test_split = 0.8
 beta_value = 2 #weight of KL divergence
 
 # early stopping attributes
-early_stopping_patience = 3 #number of epochs to wait for improvement before stopping
-early_stopping_min_delta = 1e-4 #minimum change in loss to qualify as an improvement
+early_stopping_patience = 30 #number of epochs to wait for improvement before stopping
+early_stopping_min_delta = 1e-5 #minimum change in loss to qualify as an improvement
 
 # model attributes
 input_dimension_size = num_profile_points * len(profile_features)

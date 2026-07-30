@@ -22,7 +22,7 @@ def vae_loss_function(reconstructed, original, mu, logvar, beta=config.beta_valu
 
 
 def train_model(model="VAE"):
-    train_loader, val_loader, test_loader = get_dataloaders()
+    train_loader, val_loader, test_loader = get_dataloaders(condition_cols=[2])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
 
