@@ -8,25 +8,30 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split
-
-from src.config import batch_size, processed_data_path, train_test_split
-
+from src.config import batch_size, processed_data_path, train_test_split, num_profile_points
 
 class ProcessedDataset(Dataset):
     def __init__(
         self,
         data: np.ndarray,
         condition_cols: Optional[Sequence[int]] = None,
+        num_points: int = num_profile_points,
     ) -> None:
-        self.data = data.astype(np.float32)
+        
+        # Enforce exact profile grouping[cite: 6]
+        num_profiles = data.shape[0] // num_points
+        self.data = data[:num_profiles * num_points].reshape(num_profiles, num_points, -1).astype(np.float32)
+        
         self.condition_cols = tuple(condition_cols or [])
         self.feature_cols = tuple(
-            i for i in range(self.data.shape[1]) if i not in self.condition_cols
+            i for i in range(self.data.shape[2]) if i not in self.condition_cols
         )
 
-        self.inputs = torch.from_numpy(self.data[:, self.feature_cols])
+        self.inputs = torch.from_numpy(self.data[:, :, self.feature_cols])
+        
         if len(self.condition_cols) > 0:
-            self.conditions = torch.from_numpy(self.data[:, self.condition_cols])
+            # Extract condition from the first point of each profile (assuming condition is static per profile)
+            self.conditions = torch.from_numpy(self.data[:, 0, self.condition_cols])
         else:
             self.conditions = torch.zeros(
                 (len(self.data), 0), dtype=torch.float32

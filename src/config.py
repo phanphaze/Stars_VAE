@@ -20,8 +20,8 @@ early_stopping_patience = 3 #number of epochs to wait for improvement before sto
 early_stopping_min_delta = 1e-4 #minimum change in loss to qualify as an improvement
 
 # model attributes
-input_dimension_size = 2
-output_dimension_size = 2
+input_dimension_size = num_profile_points * len(profile_features)
+output_dimension_size = num_profile_points * len(profile_features)
 latent_dimension_size = 4
 
 

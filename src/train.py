@@ -54,8 +54,11 @@ def train_model(model="VAE"):
         for data, _ in train_loader:
             data = data.to(device)
 
-            reconstructed, mu, logvar = model(data)
-            loss, mse, kld = vae_loss_function(reconstructed, data, mu, logvar)
+            # Flatten [batch_size, 60, 2] to [batch_size, 120]
+            data_flat = data.view(data.size(0), -1)
+
+            reconstructed, mu, logvar = model(data_flat)
+            loss, mse, kld = vae_loss_function(reconstructed, data_flat, mu, logvar)
 
             optimizer.zero_grad()
             loss.backward()
@@ -74,9 +77,13 @@ def train_model(model="VAE"):
         with torch.no_grad():
             for data, _ in val_loader:
                 data = data.to(device)
-                reconstructed, mu, logvar = model(data)
 
-                loss, mse, kld = vae_loss_function(reconstructed, data, mu, logvar)
+                # Flatten [batch_size, 60, 2] to [batch_size, 120]
+                data_flat = data.view(data.size(0), -1)
+
+                reconstructed, mu, logvar = model(data_flat)
+
+                loss, mse, kld = vae_loss_function(reconstructed, data_flat, mu, logvar)
                 running_val_mse += mse.item() / len(data)
                 running_val_kld += kld.item() / len(data)
 
