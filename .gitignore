@@ -219,3 +219,6 @@ __marimo__/
 
 # Large local data files
 /data
+
+# loss curves
+/Graphs

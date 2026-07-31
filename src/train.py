@@ -10,14 +10,14 @@ from src.utils import save_model
 import src.config as config
 
 
-def vae_loss_function(reconstructed, original, mu, logvar, beta=config.beta_value):
+def vae_loss_function(reconstructed, original, mu, logvar, beta=config.beta_value, lambda_val=config.lambda_value):
     # Reconstruction Loss
     mse = F.mse_loss(reconstructed, original, reduction="sum")
 
     # Kullback-Leibler Divergence
     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    total_loss = mse + (beta * kld)
+    total_loss = (lambda_val * mse) + (beta * kld)
     return total_loss, mse, kld
 
 
@@ -95,6 +95,9 @@ def train_model(model="VAE"):
         train_kld_loss = metrics["train_kld"][-1]
         val_kld_loss = metrics["val_kld"][-1]
 
+        total_train_loss = train_kld_loss + train_mse_loss
+        total_val_loss = val_kld_loss + val_mse_loss
+
         gap_mse = abs(train_mse_loss - val_mse_loss)
         gap_kld = abs(train_kld_loss - val_kld_loss)
         gap = gap_kld + gap_mse
@@ -107,10 +110,10 @@ def train_model(model="VAE"):
         prev_gap = gap
 
         print(
-            f"Epoch {epoch} | Train MSE: {train_mse_loss:.4f} | Val MSE: {val_mse_loss:.4f} | Gap: {gap_mse:.4f}"
+            f"Epoch {epoch} | Train MSE: {train_mse_loss:.4f} | Train KLD: {train_kld_loss:.4f} | Gap: {gap_mse:.4f} | Total Train: {total_train_loss}"
         )
         print(
-            f"      {" " * (len(str(epoch)))} | Train KLD: {train_kld_loss:.4f} | Val MSE: {val_kld_loss:.4f} | Gap: {gap_kld:.4f}"
+            f"      {" " * (len(str(epoch)))} | Val MSE: {val_mse_loss:.4f} | Val KLD: {val_kld_loss:.4f} | Gap: {gap_kld:.4f} | Total Val: {total_val_loss}"
         )
         if patience_counter >= config.early_stopping_patience:
             print("Early stopping triggered: train/validation divergence is increasing.")
