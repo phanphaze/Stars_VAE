@@ -90,9 +90,14 @@ def train_model(model="VAE"):
         metrics["val_mse"].append(running_val_mse / len(val_loader))
         metrics["val_kld"].append(running_val_kld / len(val_loader))
 
-        train_loss = metrics["train_mse"][-1]
-        val_loss = metrics["val_mse"][-1]
-        gap = abs(train_loss - val_loss)
+        train_mse_loss = metrics["train_mse"][-1]
+        val_mse_loss = metrics["val_mse"][-1]
+        train_kld_loss = metrics["train_kld"][-1]
+        val_kld_loss = metrics["val_kld"][-1]
+
+        gap_mse = abs(train_mse_loss - val_mse_loss)
+        gap_kld = abs(train_kld_loss - val_kld_loss)
+        gap = gap_kld + gap_mse
 
         if prev_gap is not None and gap > prev_gap + config.early_stopping_min_delta:
             patience_counter += 1
@@ -102,9 +107,11 @@ def train_model(model="VAE"):
         prev_gap = gap
 
         print(
-            f"Epoch {epoch} | Train MSE: {train_loss:.4f} | Val MSE: {val_loss:.4f} | Gap: {gap:.4f}"
+            f"Epoch {epoch} | Train MSE: {train_mse_loss:.4f} | Val MSE: {val_mse_loss:.4f} | Gap: {gap_mse:.4f}"
         )
-
+        print(
+            f"      {" " * (len(str(epoch)))} | Train KLD: {train_kld_loss:.4f} | Val MSE: {val_kld_loss:.4f} | Gap: {gap_kld:.4f}"
+        )
         if patience_counter >= config.early_stopping_patience:
             print("Early stopping triggered: train/validation divergence is increasing.")
             break

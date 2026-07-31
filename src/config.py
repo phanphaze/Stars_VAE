@@ -13,11 +13,16 @@ Learning_rate = 1e-5
 batch_size = 32
 num_epochs = 2000
 train_test_split = 0.8
-beta_value = 2 #weight of KL divergence
+
+# <1 for precise data reconstruction, 
+# =1 for standard proibalistic training, 
+# >1 for clean and separate feature learning)
+beta_value = 20 #weight of KL divergence 
+
 
 # early stopping attributes
 early_stopping_patience = 30 #number of epochs to wait for improvement before stopping
-early_stopping_min_delta = 1e-5 #minimum change in loss to qualify as an improvement
+early_stopping_min_delta = 1 #minimum change in loss to qualify as an improvement
 
 # model attributes
 input_dimension_size = num_profile_points * len(profile_features)
