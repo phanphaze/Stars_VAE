@@ -7,15 +7,15 @@ import torch.nn.functional as F
 from src.dataset import get_dataloaders
 from src.model import CAE, VAE
 from src.utils import save_model
-import src.config as config
+from src.config import beta_value, lambda_value, Learning_rate, num_epochs, early_stopping_min_delta, early_stopping_patience
 
 
-def vae_loss_function(reconstructed, original, mu, logvar, beta=config.beta_value, lambda_val=config.lambda_value):
+def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value, lambda_val=lambda_value):
     # Reconstruction Loss
     mse = F.mse_loss(reconstructed, original, reduction="sum")
 
     # Kullback-Leibler Divergence
-    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    kld = 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
     total_loss = (lambda_val * mse) + (beta * kld)
     return total_loss, mse, kld
@@ -33,7 +33,7 @@ def train_model(model="VAE"):
         model = CAE().to(device)
     print(f"Model: {model}")
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.Learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=Learning_rate)
 
     metrics = {
         "train_mse": [],
@@ -45,7 +45,7 @@ def train_model(model="VAE"):
     prev_gap = None
     patience_counter = 0
 
-    for epoch in range(config.num_epochs):
+    for epoch in range(num_epochs):
         model.train()
 
         running_train_mse = 0.0
@@ -102,7 +102,7 @@ def train_model(model="VAE"):
         gap_kld = abs(train_kld_loss - val_kld_loss)
         gap = gap_kld + gap_mse
 
-        if prev_gap is not None and gap > prev_gap + config.early_stopping_min_delta:
+        if prev_gap is not None and gap > prev_gap + early_stopping_min_delta:
             patience_counter += 1
         else:
             patience_counter = 0
@@ -115,7 +115,7 @@ def train_model(model="VAE"):
         print(
             f"      {" " * (len(str(epoch)))} | Val MSE: {val_mse_loss:.4f} | Val KLD: {val_kld_loss:.4f} | Gap: {gap_kld:.4f} | Total Val: {total_val_loss}"
         )
-        if patience_counter >= config.early_stopping_patience:
+        if patience_counter >= early_stopping_patience:
             print("Early stopping triggered: train/validation divergence is increasing.")
             break
 

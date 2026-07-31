@@ -78,12 +78,13 @@ def plot_loss_curve(metrics, hyperparams=None, figsize=(15, 5), show_hyperparams
 
     if hyperparams is None:
         try:
-            from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate
+            from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, num_profile_points
             hyperparams = {
                 "beta": beta_value,
                 "latent_dim": latent_dimension_size,
                 "learning rate": Learning_rate,
                 "batch_size": batch_size,
+                "num_profile_points": num_profile_points
             }
         except Exception:
             hyperparams = {}
