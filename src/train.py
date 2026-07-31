@@ -7,17 +7,17 @@ import torch.nn.functional as F
 from src.dataset import get_dataloaders
 from src.model import CAE, VAE
 from src.utils import save_model
-from src.config import beta_value, lambda_value, Learning_rate, num_epochs, early_stopping_min_delta, early_stopping_patience
+from src.config import beta_value, Learning_rate, num_epochs, early_stopping_min_delta, early_stopping_patience, lambda_value
 
 
-def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value, lambda_val=lambda_value):
+def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value):
     # Reconstruction Loss
     mse = F.mse_loss(reconstructed, original, reduction="sum")
 
     # Kullback-Leibler Divergence
-    kld = 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    total_loss = (lambda_val * mse) + (beta * kld)
+    total_loss = (lambda_value * mse) + (beta * kld)
     return total_loss, mse, kld
 
 
