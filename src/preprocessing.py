@@ -232,3 +232,31 @@ def rdp_preprocess(raw_df, num_profile_points=num_profile_points, split_feature=
     
     # Return as numpy array
     return filtered_df.to_numpy()
+
+'''Psudocode layout for rdp algorithm'''
+
+# import numpy as np
+# import pandas as pd
+# from src.config import num_profile_points, split_feature, profile_features
+# from src.preprocessing import fit_preprocess_scalers, process_simulation
+
+# def rdp_preprocess(raw_df, split_feature=split_feature, profile_features=profile_features, num_profile_points=num_profile_points):
+# # Normalized minmax scaled (between 0 & 1)
+# 	normalized_df = fit_preprocess_scalers(raw_df, profile_features + [split_feature], True, False)
+# # stratify data into profiles based on a split feature
+# 	profiles, splitting_features = process_simulation(normalized_df)
+# 	#ensure the indicies from the original raw_df is preserved in the new profiles and their points
+
+# 	# determine which profile has the minimum number of points
+# 	min_points = profiles.argmin #replace with real code
+
+# # ensure inputed num profile points is acceptible 
+# 	if num_profile_points > min_points:
+# 		num_profile_points = min_points
+
+# 	for profile, feature in zip(profiles, splitting_features):
+# 		while len(profiles) < num_profile_points:
+# 			# implement rdp algorithm with 2 variations. One is that we will use max heap instead of epsilon to ensure that the num of points threashold is met. 2 is that it is itterative, not recursive. Implement a perpendicular distance from line function too to help the rdp. The algorithm should return a 1d array containg the indecies of points in each profile and the splitting feature value of those profiles
+# 			pass
+# 	# create a to numpy array that contains the data from raw_df only selecting the columns profile_features + [split_feature] and only selecting the rows that have the indecies that the above rdp algorithm found. The splitting feature should be constant not empty in this returned npy dataframe for the changing profile features. 
+# 	# return this numpy array 
