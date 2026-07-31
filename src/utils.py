@@ -4,20 +4,22 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 import torch
+import unittest
+import pandas as pd
+from unittest.mock import patch
 
-from src.preprocessing import process_simulation
-
+from src.preprocessing import process_simulation, get_max_perpendicular_distance, iterative_rdp_max_heap, rdp_preprocess
 
 # for interactive desplay
 
-from src.config import model_save_dir, profile_features
+from src.config import latent_dimension_size, num_profile_points, model_save_dir, profile_features
 from src.model import VAE
 from src.dataset import get_dataloaders
 
 # Saves the model state dictionary to disk.
 def save_model(model):
     model_save_dir.mkdir(parents=True, exist_ok=True)
-    filename = "convolutional_variational_autoencoder.pth"
+    filename = "variational_autoencoder.pth"
     save_path = model_save_dir / filename
     
     torch.save(model.state_dict(), save_path)
@@ -168,3 +170,106 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
         fig.tight_layout()
 
     return fig, (ax1, ax2)
+
+def generate_stellar_profiles(model_path, num_samples=1):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Initialize architecture and load trained weights
+    model = VAE().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # Sample from standard normal distribution N(0, I)
+    z = torch.randn(num_samples, latent_dimension_size).to(device)
+
+    with torch.no_grad():
+        # Pass latent vectors through the decoder
+        generated_flat = model.decode(z) 
+        
+    # Reshape from flattened tensor to original profile dimensions: [samples, 60, 2]
+    num_features = len(profile_features)
+    generated_profiles = generated_flat.view(num_samples, num_profile_points, num_features)
+    
+    return generated_profiles.cpu().numpy()
+
+
+'''Test class for RDP Algorithm'''
+
+# class TestRDPAlgorithm(unittest.TestCase):
+    
+#     def test_get_max_perpendicular_distance(self):
+#         points = np.array([
+#             [0.0, 0.0],
+#             [1.0, 2.0],
+#             [2.0, 0.5],
+#             [3.0, 0.0]
+#         ])
+        
+#         dist, split_idx = get_max_perpendicular_distance(points, 0, 3)
+#         self.assertAlmostEqual(dist, 2.0, places=5)
+#         self.assertEqual(split_idx, 1)
+
+#     def test_get_max_perpendicular_distance_collinear(self):
+#         points = np.array([
+#             [0.0, 0.0],
+#             [1.0, 1.0],
+#             [2.0, 2.0],
+#             [3.0, 3.0]
+#         ])
+        
+#         dist, split_idx = get_max_perpendicular_distance(points, 0, 3)
+#         self.assertAlmostEqual(dist, 0.0)
+
+#     def test_iterative_rdp_max_heap(self):
+#         points = np.array([
+#             [0.0, 0.0],
+#             [1.0, 0.1],
+#             [2.0, 5.0],
+#             [3.0, 0.2],
+#             [4.0, 0.0]
+#         ])
+#         original_indices = np.array([100, 101, 102, 103, 104])
+        
+#         target_points = 3
+#         rdp_indices = iterative_rdp_max_heap(points, original_indices, target_points)
+        
+#         np.testing.assert_array_equal(rdp_indices, [100, 102, 104])
+
+#     def test_iterative_rdp_target_exceeds_points(self):
+#         points = np.array([[0,0], [1,1], [2,0]])
+#         original_indices = np.array([0, 1, 2])
+#         rdp_indices = iterative_rdp_max_heap(points, original_indices, 10)
+        
+#         np.testing.assert_array_equal(rdp_indices, [0, 1, 2])
+
+#     @patch('src.preprocessing.process_simulation')
+#     @patch('src.preprocessing.fit_preprocess_scalers')
+#     def test_rdp_preprocess_integration(self, mock_fit, mock_process):
+#         np.random.seed(42)
+#         raw_df = pd.DataFrame({
+#             'feature1': np.random.rand(10),
+#             'feature2': np.random.rand(10),
+#             'zone': [1.0]*5 + [2.0]*5
+#         }, index=[10, 11, 12, 13, 14, 20, 21, 22, 23, 24])
+
+#         mock_fit.return_value = (raw_df, {})
+        
+#         profile_1 = raw_df.iloc[0:5]
+#         profile_2 = raw_df.iloc[5:10]
+#         mock_process.return_value = ([1.0, 2.0], [profile_1, profile_2])
+
+#         profile_features = ['feature1', 'feature2']
+#         split_feature = 'zone'
+#         target_points = 3
+        
+#         output_npy = rdp_preprocess(
+#             raw_df=raw_df,
+#             split_feature=split_feature,
+#             profile_features=profile_features,
+#             num_profile_points=target_points
+#         )
+        
+#         self.assertEqual(output_npy.shape, (6, 3))
+#         self.assertTrue(np.all(output_npy[:, 2] == np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])))
+
+# unittest.main(argv=['first-arg-is-ignored'], exit=False)

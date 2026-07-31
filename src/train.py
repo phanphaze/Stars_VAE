@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from src.dataset import get_dataloaders
 from src.model import CAE, VAE
@@ -21,8 +22,8 @@ def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value):
     return total_loss, mse, kld
 
 
-def train_model(model="VAE"):
-    train_loader, val_loader, test_loader = get_dataloaders(condition_cols=[2])
+def train_model(data, model="VAE"):
+    train_loader, val_loader, test_loader = get_dataloaders(data, condition_cols=[2])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
 
