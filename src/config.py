@@ -9,16 +9,16 @@ split_feature = 'star_age'
 num_profile_points = 60
 
 # train attributes
-Learning_rate = 1e-5
+Learning_rate = 1e-4
 batch_size = 256 
-num_epochs = 2000
+num_epochs = 3500
 train_test_split = 0.8
 
 # <1 for precise data reconstruction, 
 # =1 for standard proibalistic training, 
 # >1 for clean and separate feature learning)
-beta_value = 1 #weight of KL divergence 
-lambda_value = .3 #weight of MSE divergence
+beta_value = .1 #weight of KL divergence 
+lambda_value = 1 #weight of MSE divergence
 
 
 # early stopping attributes
@@ -28,7 +28,7 @@ early_stopping_min_delta = 1 #minimum change in loss to qualify as an improvemen
 # model attributes
 input_dimension_size = num_profile_points * len(profile_features)
 output_dimension_size = num_profile_points * len(profile_features)
-latent_dimension_size = 4
+latent_dimension_size = 6
 
 
 # Data paths
