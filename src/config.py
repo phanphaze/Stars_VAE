@@ -9,7 +9,7 @@ split_feature = 'star_age'
 num_profile_points = 60
 
 # train attributes
-Learning_rate = 1e-4
+Learning_rate = 1e-5
 batch_size = 128
 num_epochs = 5000
 train_test_split = 0.8
