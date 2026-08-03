@@ -11,7 +11,7 @@ num_profile_points = 60
 # train attributes
 Learning_rate = 1e-4
 batch_size = 128
-num_epochs = 1000
+num_epochs = 5000
 train_test_split = 0.8
 
 # <1 for precise data reconstruction, 
@@ -23,12 +23,12 @@ lambda_value = 1 #weight of MSE divergence
 
 # early stopping attributes
 early_stopping_patience = 30 #number of epochs to wait for improvement before stopping
-early_stopping_min_delta = 1 #minimum change in loss to qualify as an improvement
+early_stopping_min_delta = .01 #minimum change in loss to qualify as an improvement
 
 # model attributes
 input_dimension_size = num_profile_points * len(profile_features)
 output_dimension_size = num_profile_points * len(profile_features)
-hidden_dimension_1_size = 512
+hidden_dimension_1_size = 1024
 latent_dimension_size = 8
 
 
