@@ -1,14 +1,9 @@
-from torchvision import Dataset
-from tqdm import tqdm 
-from torchvision import transforms 
-from torchvision.utils import save_image
-from torch.utils.data import DataLoader
+from tqdm import tqdm
+from torch.utils.data import DataLoader, Dataset   
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn, optim
-from torch.utils.data import Dataset
+from torch import nn, optim                         
 
 mass_enclosed_key = "logR"
 temp_key = "logT"
@@ -76,17 +71,25 @@ if __name__ == "__main__":
  
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    epochs = 50
+    epochs = 2
     batch_size = 32
     learning_rate = 1e-4
     hidden_dimension = 200
     z_dimension = 20
  
     # --- `profs` must exist before this point. Load your real data here: ---
-    profs = np.load("data/raw/sample_data.npy", allow_pickle=True)  # adjust path as needed
- 
+    #profs = np.load("/work/nvme/bhvr/fatimasyed7/Stars_VAE/data/processed/processed_data.npy", allow_pickle=True)
+    profs = np.load("/work/nvme/bhvr/fatimasyed7/Stars_VAE/data/processed/processed_data.npy", allow_pickle=True)
+    print(type(profs))
+    print(profs.shape)
+    print(profs[0])
     dataset = training(profs, mass_enclosed_key, temp_key)
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+
+    profs = np.load("/work/nvme/bhvr/fatimasyed7/Stars_VAE/data/processed/processed_data.npy", allow_pickle=True)
+    print(type(profs))
+    print(profs.shape)
+    print(profs[0])
  
     model = VAE(input_dimension, output_dimension, hidden_dimension, z_dimension).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)

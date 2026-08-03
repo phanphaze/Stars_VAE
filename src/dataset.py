@@ -78,7 +78,7 @@ def get_dataloaders(
     train_dataset, val_dataset, test_dataset = splits
 
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size_, shuffle=shuffle, drop_last=False
+        train_dataset, batch_size=batch_size_, shuffle=shuffle, drop_last=True
     )
     val_loader = DataLoader(val_dataset, batch_size=batch_size_, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size_, shuffle=False)
