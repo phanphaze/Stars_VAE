@@ -75,13 +75,14 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
 
     if hyperparams is None:
         try:
-            from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, lambda_value
+            from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, lambda_value, num_profile_points
             hyperparams = {
                 "beta": beta_value,
                 "latent_dim": latent_dimension_size,
                 "learning rate": Learning_rate,
                 "batch_size": batch_size,
-                "lambda_val": lambda_value
+                "lambda_val": lambda_value,
+                "num_profile_points": num_profile_points
             }
         except Exception:
             hyperparams = {}
@@ -171,8 +172,10 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
 
     return fig, (ax1, ax2)
 
+
 def plot_profile_reconstruction(
     scalers, 
+    title="Stellar Thermodynamic Profile",
     model_path=model_save_dir / "variational_autoencoder.pth", 
     points=num_profile_points, 
     features=len(profile_features)
@@ -194,9 +197,13 @@ def plot_profile_reconstruction(
 
     real_profile = real_profile[real_profile[:, 0].argsort()]
 
-    scaled_real_mass = scalers['mass'].transform(pd.DataFrame(real_profile[:, 0], columns=['mass']))
-    scaled_real_logT = scalers['logT'].transform(pd.DataFrame(real_profile[:, 1], columns=['logT']))
-    scaled_real_profile = np.hstack((scaled_real_mass, scaled_real_logT))
+    # Dynamically assign feature names from config
+    feature_x = profile_features[0]
+    feature_y = profile_features[1]
+
+    scaled_real_x = scalers[feature_x].transform(pd.DataFrame(real_profile[:, 0], columns=[feature_x]))
+    scaled_real_y = scalers[feature_y].transform(pd.DataFrame(real_profile[:, 1], columns=[feature_y]))
+    scaled_real_profile = np.hstack((scaled_real_x, scaled_real_y))
 
     real_profile_flat = torch.from_numpy(scaled_real_profile).float().view(1, -1).to(device)
     
@@ -205,11 +212,11 @@ def plot_profile_reconstruction(
 
     synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
 
-    unscaled_mass = scalers['mass'].inverse_transform(pd.DataFrame(synthetic_profile[:, 0], columns=['mass']))
-    unscaled_logT = scalers['logT'].inverse_transform(pd.DataFrame(synthetic_profile[:, 1], columns=['logT']))
+    unscaled_x = scalers[feature_x].inverse_transform(pd.DataFrame(synthetic_profile[:, 0], columns=[feature_x]))
+    unscaled_y = scalers[feature_y].inverse_transform(pd.DataFrame(synthetic_profile[:, 1], columns=[feature_y]))
 
-    synthetic_profile[:, 0] = unscaled_mass.flatten()
-    synthetic_profile[:, 1] = unscaled_logT.flatten()
+    synthetic_profile[:, 0] = unscaled_x.flatten()
+    synthetic_profile[:, 1] = unscaled_y.flatten()
 
     synthetic_profile = synthetic_profile[synthetic_profile[:, 0].argsort()]
 
@@ -218,9 +225,11 @@ def plot_profile_reconstruction(
     ax.plot(real_profile[:, 0], real_profile[:, 1], label="Real Profile", color="black", linewidth=2.5)
     ax.plot(synthetic_profile[:, 0], synthetic_profile[:, 1], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
     
-    ax.set_title("Stellar Thermodynamic Profile", fontsize=18)
-    ax.set_xlabel("Mass enclosed", fontsize=16) 
-    ax.set_ylabel("LogT", fontsize=16)
+    ax.set_title(title, fontsize=18)
+    
+    # Map labels to configuration array
+    ax.set_xlabel(feature_x, fontsize=16) 
+    ax.set_ylabel(feature_y, fontsize=16)
     
     ax.grid(True, which="both", linestyle="--", alpha=0.6)
     ax.legend(fontsize=14)
@@ -228,27 +237,6 @@ def plot_profile_reconstruction(
     
     plt.tight_layout()
     plt.show()
-    
-def generate_stellar_profiles(model_path, num_samples=1):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Initialize architecture and load trained weights
-    model = VAE().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
-
-    # Sample from standard normal distribution N(0, I)
-    z = torch.randn(num_samples, latent_dimension_size).to(device)
-
-    with torch.no_grad():
-        # Pass latent vectors through the decoder
-        generated_flat = model.decode(z) 
-        
-    # Reshape from flattened tensor to original profile dimensions: [samples, 60, 2]
-    num_features = len(profile_features)
-    generated_profiles = generated_flat.view(num_samples, num_profile_points, num_features)
-    
-    return generated_profiles.cpu().numpy()
 
 
 '''Test class for RDP Algorithm'''
