@@ -1,148 +1,131 @@
-from __future__ import annotations
-from typing import Optional
+from torchvision import Dataset
+from tqdm import tqdm 
+from torchvision import transforms 
+from torchvision.utils import save_image
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn, optim
+from torch.utils.data import Dataset
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+mass_enclosed_key = "logR"
+temp_key = "logT"
+profs_shape = 977
+ 
+class training(Dataset):
+    def __init__(self, profs, mass_enclosed_key, temp_key):
+        self.profs = profs
+        self.mass_enclosed_key = mass_enclosed_key
+        self.temp_key = temp_key
+ 
+    def __len__(self):
+        return len(self.profs)
+ 
+    def __getitem__(self, idx):
+        profile = self.profs[idx]
+        mass_data = np.asarray(profile[self.mass_enclosed_key], dtype=np.float32)
+        temp_data = np.asarray(profile[self.temp_key], dtype=np.float32)
+ 
+        x_input = np.concatenate([mass_data, temp_data])  
+        x_output = temp_data                              
+ 
+        return torch.from_numpy(x_input), torch.from_numpy(x_output)
+ 
+ 
 
-# Return a summary of missing and null values in a DataFrame.
-def check_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    summary = (
-        df.isna()
-        .sum()
-        .to_frame(name="missing_values")
-        .sort_values("missing_values", ascending=False)
-    )
-    summary["null_percent"] = (summary["missing_values"] / len(df) * 100).round(2)
-    return summary[summary["missing_values"] > 0]
+class VAE(nn.Module):
+    def __init__(self, input_dimension, output_dimension, hidden_dimension=200, z_dimension=20):
+        super().__init__()
+        # Encoder
+        self.in_2hid = nn.Linear(input_dimension, hidden_dimension)
+        self.hid_2mu = nn.Linear(hidden_dimension, z_dimension)
+        self.hid_2sigma = nn.Linear(hidden_dimension, z_dimension)
+        # Decoder
+        self.z_2hid = nn.Linear(z_dimension, hidden_dimension)
+        self.hid_2out = nn.Linear(hidden_dimension, output_dimension)
+ 
+    def encoder(self, x):
+        a = nn.ReLU()(self.in_2hid(x))
+        mu, sigma = self.hid_2mu(a), self.hid_2sigma(a)
+        return mu, sigma
+ 
+    def decoder(self, z):
+        a = nn.ReLU()(self.z_2hid(z))
+        # Linear output -- logT is not bounded in [0,1], so no sigmoid here.
+        return self.hid_2out(a)
+ 
+    def forward(self, x):
+        mu, sigma = self.encoder(x)
+        z_reparameterized = mu + sigma * torch.randn_like(sigma)
+        x_reconstructed = self.decoder(z_reparameterized)
+        return x_reconstructed, mu, sigma
+ 
+if __name__ == "__main__":
+    input_dimension = 2 * profs_shape   # mass enclosed + temperature
+    output_dimension = profs_shape      # temperature only
+ 
+    # ---- Sanity check with fake data ----
+    x = torch.randn(4, input_dimension)
+    model = VAE(input_dimension, output_dimension)
+    x_reconstructed, mu, sigma = model(x)
+    print(x_reconstructed.shape) 
+    print(mu.shape)               
+    print(sigma.shape)            
+ 
 
-# Drop columns with constant values from the DataFrame.
-def drop_constant_columns(df: pd.DataFrame) -> pd.DataFrame:
-    constant_columns = df.columns[df.nunique() <= 1]
-    if len(constant_columns) > 0:
-        print(f"Dropping constant columns: {list(constant_columns)}")
-        df = df.drop(columns=constant_columns)
-    return df
-
-# Return a list of numeric feature names from the DataFrame.
-def numeric_features(df: pd.DataFrame) -> list[str]:
-    return df.select_dtypes(include="number").columns.tolist()
-
-# fits the data to the scalers and returns the transformed DataFrame and the fitted scalers
-def fit_preprocess_scalers(
-    df: pd.DataFrame,
-    features: Optional[list[str]] = None,
-    normalize: bool = True,
-    standardize: bool = False,
-) -> tuple[pd.DataFrame, dict[str, object]]:
-    if features is None:
-        features = numeric_features(df)
-
-    working_df = drop_constant_columns(df.copy())
-    scalers: dict[str, object] = {}
-
-    for feature in features:
-        if feature not in working_df.columns:
-            continue
-
-        values = pd.to_numeric(working_df[feature], errors="coerce").astype(float)
-        values = values.fillna(values.median())
-
-        if values.nunique(dropna=True) <= 1:
-            working_df[feature] = 0.0
-            continue
-
-        transformer = None
-        if normalize:
-            transformer = MinMaxScaler()
-        elif standardize:
-            transformer = StandardScaler()
-
-        if transformer is not None:
-            working_df[[feature]] = transformer.fit_transform(values.to_frame())
-            scalers[feature] = transformer
-
-    return working_df, scalers
-
-# transform the data using the provided scalers and return the transformed DataFrame
-def transform_with_scalers(
-    df: pd.DataFrame,
-    scalers: dict[str, object],
-) -> pd.DataFrame:
-    working_df = df.copy()
-    for feature, scaler in scalers.items():
-        if feature not in working_df.columns:
-            continue
-        values = pd.to_numeric(working_df[feature], errors="coerce").astype(float)
-        values = values.fillna(values.median())
-        working_df[[feature]] = scaler.transform(values.to_frame())
-    return working_df
-
-# Return a simplified DataFrame with rows selected by the Ramer-Douglas-Peucker algorithm.
-def rdp(
-    df: pd.DataFrame,
-    features: Optional[list[str]] = None,
-    epsilon: float = 1.0,
-) -> pd.DataFrame:
-    if features is None:
-        features = numeric_features(df)
-
-    working_df = drop_constant_columns(df.copy())
-    selected_features = [feature for feature in features if feature in working_df.columns]
-    if not selected_features or len(working_df) < 3:
-        return working_df
-
-    points = (
-        working_df[selected_features]
-        .apply(pd.to_numeric, errors="coerce")
-        .astype(float)
-        .fillna(lambda col: col.median())
-    )
-    points = points.fillna(points.median(axis=0))
-
-    indices = _rdp_indices(points.to_numpy(), epsilon)
-    simplified_df = working_df.iloc[indices].reset_index(drop=True)
-    return simplified_df
-
-def _rdp_indices(points: np.ndarray, epsilon: float) -> list[int]:
-    """
-    Calculates indices for N-dimensional data simplification using the 
-    Ramer-Douglas-Peucker algorithm.
-    """
-    start = 0
-    end = len(points) - 1
-    
-    if end <= 0:
-        return [start]
-        
-    a = points[start]
-    b = points[end]
-    ab = b - a
-    norm_ab = np.linalg.norm(ab)
-    
-    # Calculate perpendicular distances from all points to the line connecting start and end
-    if norm_ab == 0.0:
-        distances = np.linalg.norm(points - a, axis=1)
-    else:
-        u = ab / norm_ab
-        ap = points - a
-        # Vectorized projection for N-dimensional points
-        projections = np.outer(np.dot(ap, u), u)
-        distances = np.linalg.norm(ap - projections, axis=1)
-        
-    # Find the point furthest from the line segment
-    dmax = 0.0
-    index = 0
-    if end > 1:
-        dmax = np.max(distances[1:end])
-        index = np.argmax(distances[1:end]) + 1
-        
-    # Recursively simplify if the max distance is greater than the epsilon threshold
-    if dmax > epsilon:
-        left_indices = _rdp_indices(points[:index+1], epsilon)
-        right_indices = _rdp_indices(points[index:], epsilon)
-        
-        # Combine indices while avoiding duplicating the pivot point
-        return left_indices[:-1] + [i + index for i in right_indices]
-    else:
-        return [start, end]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    epochs = 50
+    batch_size = 32
+    learning_rate = 1e-4
+    hidden_dimension = 200
+    z_dimension = 20
+ 
+    # --- `profs` must exist before this point. Load your real data here: ---
+    profs = np.load("data/raw/sample_data.npy", allow_pickle=True)  # adjust path as needed
+ 
+    dataset = training(profs, mass_enclosed_key, temp_key)
+    train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+ 
+    model = VAE(input_dimension, output_dimension, hidden_dimension, z_dimension).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    loss_function = nn.MSELoss(reduction="sum")
+ 
+    for epoch in range(epochs):
+        loop = tqdm(enumerate(train_loader))
+        for i, (x_input, x_output) in loop:
+            x_input = x_input.to(device)
+            x_output = x_output.to(device)
+ 
+            x_reconstructed, mu, sigma = model(x_input)
+            reconstruction_loss = loss_function(x_reconstructed, x_output)
+            kl_divergence = -0.5 * torch.sum(1 + torch.log(sigma.pow(2)) - mu.pow(2) - sigma.pow(2))
+            loss = reconstruction_loss + kl_divergence
+ 
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            loop.set_postfix(loss=loss.item())
+ 
+    model = model.to("cpu")
+ 
+    def reconstruction(snapshot_idx):
+        mass = np.asarray(profs[snapshot_idx][mass_enclosed_key], dtype=np.float32)
+        temp = np.asarray(profs[snapshot_idx][temp_key], dtype=np.float32)
+        x_input = torch.from_numpy(np.concatenate([mass, temp])).unsqueeze(0)
+ 
+        with torch.no_grad():
+            mu, sigma = model.encoder(x_input)
+            z = mu + sigma * torch.randn_like(sigma)
+            out = model.decoder(z).squeeze(0).numpy()
+ 
+        plt.figure()
+        plt.plot(temp, label="true logT")
+        plt.plot(out, label="reconstructed logT")
+        plt.legend()
+        plt.savefig(f"reconstruction_{snapshot_idx}.png")
+        plt.close()
+ 
+    for idx in [0, 100, 433]:
+        reconstruction(idx)
