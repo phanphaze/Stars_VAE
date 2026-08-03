@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from src.config import latent_dimension_size, input_dimension_size, output_dimension_size
+from src.config import latent_dimension_size, input_dimension_size, output_dimension_size, hidden_dimension_1_size
 from torchvision import datasets 
 from torchvision import transforms 
 
@@ -17,7 +17,7 @@ class VAE(nn.Module):  # Variational Autoencoder
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.output_dim = output_dim
-        hidden_dim = max(self.input_dim * 2, 256)
+        hidden_dim = hidden_dimension_1_size
 
         self.encoder = nn.Sequential(
             nn.Linear(self.input_dim, hidden_dim),
@@ -27,20 +27,28 @@ class VAE(nn.Module):  # Variational Autoencoder
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.BatchNorm1d(hidden_dim // 2),
             nn.LeakyReLU(0.2),
+
+            nn.Linear(hidden_dim // 2, hidden_dim // 4),
+            nn.BatchNorm1d(hidden_dim // 4),
+            nn.LeakyReLU(0.2)
         )
         
-        self.fc_mu = nn.Linear(hidden_dim // 2, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim // 2, latent_dim)
+        self.fc_mu = nn.Linear(hidden_dim // 4, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim // 4, latent_dim)
 
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 2),
+            nn.Linear(latent_dim, hidden_dim // 4),
+            nn.BatchNorm1d(hidden_dim // 4),
+            nn.LeakyReLU(0.2),
+
+            nn.Linear(hidden_dim // 4, hidden_dim // 2),
             nn.BatchNorm1d(hidden_dim // 2),
             nn.LeakyReLU(0.2),
 
-            nn.Linear(hidden_dim // 2, hidden_dim),
+            nn.Linear(hidden_dim // 2, hidden_dim ),
             nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden_dim, output_dim)
         )
 
     def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -133,4 +141,3 @@ class CAE(nn.Module):  # Conditional Autoencoder
         z = self.reparameterize(mu, logvar)
         decoded = self.decode(z, c)
         return decoded, mu, logvar
-
