@@ -11,7 +11,7 @@ num_profile_points = 60
 # train attributes
 Learning_rate = 1e-4
 batch_size = 128
-num_epochs = 1500
+num_epochs = 1000
 train_test_split = 0.8
 
 # <1 for precise data reconstruction, 
@@ -29,11 +29,11 @@ early_stopping_min_delta = 1 #minimum change in loss to qualify as an improvemen
 input_dimension_size = num_profile_points * len(profile_features)
 output_dimension_size = num_profile_points * len(profile_features)
 hidden_dimension_1_size = 512
-latent_dimension_size = 2
+latent_dimension_size = 8
 
 
 # Data paths
 project_root = Path(__file__).resolve().parent.parent
-raw_data_dir = project_root / "data" / "raw"
+raw_data_path = project_root / "data" / "raw" / "sample_data.npy"
 processed_data_path = project_root / "data" / "processed" / "processed_data.npy"
 model_save_dir = project_root / "models"
