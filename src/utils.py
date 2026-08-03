@@ -171,6 +171,64 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
 
     return fig, (ax1, ax2)
 
+def plot_profile_reconstruction(
+    scalers, 
+    model_path=model_save_dir / "variational_autoencoder.pth", 
+    points=num_profile_points, 
+    features=len(profile_features)
+):
+    """
+    Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
+    Automatically retrieves validation data. Requires only fitted scalers. Architecture instantiation 
+    and hardware allocation are encapsulated.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    model = VAE().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # Retrieve ground truth profile directly from the validation loader
+    _, val_loader, _ = get_dataloaders(condition_cols=[2])
+    real_profile = next(iter(val_loader))[0][0].numpy()
+
+    real_profile = real_profile[real_profile[:, 0].argsort()]
+
+    scaled_real_mass = scalers['mass'].transform(pd.DataFrame(real_profile[:, 0], columns=['mass']))
+    scaled_real_logT = scalers['logT'].transform(pd.DataFrame(real_profile[:, 1], columns=['logT']))
+    scaled_real_profile = np.hstack((scaled_real_mass, scaled_real_logT))
+
+    real_profile_flat = torch.from_numpy(scaled_real_profile).float().view(1, -1).to(device)
+    
+    with torch.no_grad():
+        reconstructed_flat, _, _ = model(real_profile_flat)
+
+    synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
+
+    unscaled_mass = scalers['mass'].inverse_transform(pd.DataFrame(synthetic_profile[:, 0], columns=['mass']))
+    unscaled_logT = scalers['logT'].inverse_transform(pd.DataFrame(synthetic_profile[:, 1], columns=['logT']))
+
+    synthetic_profile[:, 0] = unscaled_mass.flatten()
+    synthetic_profile[:, 1] = unscaled_logT.flatten()
+
+    synthetic_profile = synthetic_profile[synthetic_profile[:, 0].argsort()]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    ax.plot(real_profile[:, 0], real_profile[:, 1], label="Real Profile", color="black", linewidth=2.5)
+    ax.plot(synthetic_profile[:, 0], synthetic_profile[:, 1], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+    
+    ax.set_title("Stellar Thermodynamic Profile", fontsize=18)
+    ax.set_xlabel("Mass enclosed", fontsize=16) 
+    ax.set_ylabel("LogT", fontsize=16)
+    
+    ax.grid(True, which="both", linestyle="--", alpha=0.6)
+    ax.legend(fontsize=14)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    
+    plt.tight_layout()
+    plt.show()
+    
 def generate_stellar_profiles(model_path, num_samples=1):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
