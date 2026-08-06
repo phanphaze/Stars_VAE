@@ -17,7 +17,7 @@ train_test_split = 0.8
 # <1 for precise data reconstruction, 
 # =1 for standard proibalistic training, 
 # >1 for clean and separate feature learning)
-beta_value = .5 #weight of KL divergence 
+beta_value = .175 #weight of KL divergence 
 lambda_value = 1 #weight of MSE divergence
 
 # early stopping attributes

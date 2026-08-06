@@ -18,14 +18,14 @@ from src.model import VAE
 from src.dataset import get_dataloaders
 
 # Saves the model state dictionary to disk.
-def save_model(model):
+def save_model(model, verbose=True):
     model_save_dir.mkdir(parents=True, exist_ok=True)
     filename = "variational_autoencoder.pth"
     save_path = model_save_dir / filename
     
     torch.save(model.state_dict(), save_path)
-    print(f"Model saved to: {save_path}")
-
+    if verbose:
+        print(f"Model saved to: {save_path}")
 
 def varify_rdp(df, processed_df):
     # Extract the profiles directly from the RAW dataframe to keep the scale consistent
@@ -241,9 +241,9 @@ def plot_profile_reconstruction(
 
 # used for visualizing the latent space of the VAE model. Uses pca for interpretability and tsne for more accurate clustering.
 def visualize_latent_space(
-    model_path=model_save_dir / "variational_autoencoder.pth",
-    reduction_method="tsne",
-    sample_limit=5000
+    reduction_method="tsne", #t-distributed Stochastic Neighbor Embedding
+    sample_limit=5000,
+    model_path=model_save_dir / "variational_autoencoder.pth"
 ):
     """
     Extracts and projects the VAE latent space into 2D for physical poster visualization.
