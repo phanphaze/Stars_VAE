@@ -2,16 +2,17 @@
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+
 import numpy as np
 import torch
 import unittest
 import pandas as pd
 from unittest.mock import patch
 
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
 from src.preprocessing import process_simulation, get_max_perpendicular_distance, iterative_rdp_max_heap, rdp_preprocess
-
-# for interactive desplay
-
 from src.config import latent_dimension_size, num_profile_points, model_save_dir, profile_features
 from src.model import VAE
 from src.dataset import get_dataloaders
@@ -238,6 +239,94 @@ def plot_profile_reconstruction(
     plt.tight_layout()
     plt.show()
 
+# used for visualizing the latent space of the VAE model. Uses pca for interpretability and tsne for more accurate clustering.
+def visualize_latent_space(
+    model_path=model_save_dir / "variational_autoencoder.pth",
+    reduction_method="tsne",
+    sample_limit=5000
+):
+    """
+    Extracts and projects the VAE latent space into 2D for physical poster visualization.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Instantiate and load the VAE architecture[cite: 3]
+    model = VAE().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # Retrieve validation data, isolating star_age using condition_cols=[2][cite: 5]
+    _, val_loader, _ = get_dataloaders(condition_cols=[2])
+
+    latent_vectors = []
+    condition_values = []
+
+    with torch.no_grad():
+        for data, condition in val_loader:
+            data = data.to(device)
+            
+            # Flatten input to match VAE encoder dimension requirements[cite: 5]
+            data_flat = data.view(data.size(0), -1)
+            
+            mu, _ = model.encode(data_flat)
+            latent_vectors.append(mu.cpu().numpy())
+            condition_values.append(condition.cpu().numpy())
+
+    # Consolidate batch arrays
+    latent_vectors = np.concatenate(latent_vectors, axis=0)
+    condition_values = np.concatenate(condition_values, axis=0).flatten()
+
+    # Apply random sampling threshold to mitigate visual overplotting density
+    if len(latent_vectors) > sample_limit:
+        indices = np.random.choice(len(latent_vectors), sample_limit, replace=False)
+        latent_vectors = latent_vectors[indices]
+        condition_values = condition_values[indices]
+
+    # Execute geometric dimension reduction mapping
+    if reduction_method.lower() == "tsne":
+        reducer = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
+    else:
+        reducer = PCA(n_components=2)
+        
+    latent_2d = reducer.fit_transform(latent_vectors)
+
+    # Apply high-legibility typographic overrides for physical print
+    plt.rcParams.update({
+        "font.size": 18,
+        "axes.titlesize": 24,
+        "axes.labelsize": 20,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 16
+    })
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # Render spatial coordinates utilizing the perceptually uniform 'viridis' colormap
+    scatter = ax.scatter(
+        latent_2d[:, 0], 
+        latent_2d[:, 1], 
+        c=condition_values, 
+        cmap="viridis", 
+        s=80, 
+        alpha=0.85, 
+        edgecolors="w", 
+        linewidth=0.5
+    )
+
+    # Configure scaled colorbar relative to extracted conditional values
+    cbar = plt.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Star Age (Normalized)", rotation=270, labelpad=30)
+
+    ax.set_title(f"VAE Latent Space Distribution ({reduction_method.upper()})")
+    ax.set_xlabel(f"{reduction_method.upper()} Component 1")
+    ax.set_ylabel(f"{reduction_method.upper()} Component 2")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
 
 '''Test class for RDP Algorithm'''
 
