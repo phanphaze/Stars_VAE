@@ -9,9 +9,9 @@ split_feature = 'star_age'
 num_profile_points = 60
 
 # train attributes
-Learning_rate = 1e-5
-batch_size = 128
-num_epochs = 2000
+Learning_rate = 1e-4
+batch_size = 256
+num_epochs = 4000
 train_test_split = 0.8
 
 # <1 for precise data reconstruction, 
@@ -27,7 +27,7 @@ early_stopping_min_delta = .01 #minimum change in loss to qualify as an improvem
 # model attributes
 input_dimension_size = num_profile_points * len(profile_features)
 output_dimension_size = num_profile_points * len(profile_features)
-hidden_dimension_1_size = 1024
+hidden_dimension_1_size = 512
 latent_dimension_size = 8
 
 # Data paths

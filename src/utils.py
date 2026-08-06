@@ -3,14 +3,17 @@
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
+import torch
+import torch.nn.functional as F
+
 import numpy as np
 import torch
 import unittest
 import pandas as pd
 from unittest.mock import patch
-
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 
 from src.preprocessing import process_simulation, get_max_perpendicular_distance, iterative_rdp_max_heap, rdp_preprocess
 from src.config import latent_dimension_size, num_profile_points, model_save_dir, profile_features
@@ -61,32 +64,141 @@ def varify_rdp(df, processed_df):
     plt.show()
 
 
-def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=None, figsize=(15, 5)):
-    """
-    Plot training/validation MSE and KLD curves.
-    """
-    plt.rcParams.update({
-        "font.size": 14,
-        "axes.titlesize": 18,
-        "axes.labelsize": 16,
-        "legend.fontsize": 12,
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
-    })
+# def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=None, figsize=(15, 5)):
+#     """
+#     Plot training/validation MSE and KLD curves.
+#     """
+#     plt.rcParams.update({
+#         "font.size": 14,
+#         "axes.titlesize": 18,
+#         "axes.labelsize": 16,
+#         "legend.fontsize": 12,
+#         "xtick.labelsize": 12,
+#         "ytick.labelsize": 12,
+#     })
 
-    if hyperparams is None:
-        try:
-            from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, lambda_value, num_profile_points
-            hyperparams = {
-                "beta": beta_value,
-                "latent_dim": latent_dimension_size,
-                "learning rate": Learning_rate,
-                "batch_size": batch_size,
-                "lambda_val": lambda_value,
-                "num_profile_points": num_profile_points
-            }
-        except Exception:
-            hyperparams = {}
+#     if hyperparams is None:
+#         try:
+#             from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, lambda_value, num_profile_points
+#             hyperparams = {
+#                 "beta": beta_value,
+#                 "latent_dim": latent_dimension_size,
+#                 "learning rate": Learning_rate,
+#                 "batch_size": batch_size,
+#                 "lambda_val": lambda_value,
+#                 "num_profile_points": num_profile_points
+#             }
+#         except Exception:
+#             hyperparams = {}
+
+#     epochs = range(len(metrics["train_mse"]))
+
+#     train_mse = np.asarray(metrics["train_mse"], dtype=float)
+#     val_mse = np.asarray(metrics["val_mse"], dtype=float)
+#     train_kld = np.asarray(metrics["train_kld"], dtype=float)
+#     val_kld = np.asarray(metrics["val_kld"], dtype=float)
+
+#     if log_scale:
+#         eps = 1e-12
+#         train_mse = np.clip(train_mse, eps, None)
+#         val_mse = np.clip(val_mse, eps, None)
+#         train_kld = np.clip(train_kld, eps, None)
+#         val_kld = np.clip(val_kld, eps, None)
+
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+
+#     # MSE Plot
+#     ax1.plot(epochs, train_mse, label="Train MSE", linewidth=2.2, alpha=1)
+#     ax1.plot(epochs, val_mse, label="Validation MSE", linewidth=2.2, alpha=0.5)
+#     ax1.set_title("Reconstruction Loss (MSE)")
+#     ax1.set_xlabel("Epoch", fontsize=15)
+#     ax1.set_ylabel("MSE", fontsize=15)
+#     ax1.legend(frameon=True)
+#     ax1.grid(True, which="both", linestyle="--", alpha=0.6)
+
+#     # KLD Plot
+#     ax2.plot(epochs, train_kld, label="Train KLD", linewidth=2.2, alpha=1)
+#     ax2.plot(epochs, val_kld, label="Validation KLD", linewidth=2.2, alpha=0.5)
+#     ax2.set_title("Latent Divergence (KLD)")
+#     ax2.set_xlabel("Epoch", fontsize=15)
+#     ax2.set_ylabel("KLD", fontsize=15)
+#     ax2.legend(frameon=True)
+#     ax2.grid(True, which="both", linestyle="--", alpha=0.6)
+
+#     # Dynamic Axis Configuration
+#     def configure_axis(ax):
+#         if log_scale:
+#             ax.set_yscale("log")
+#             ymin, ymax = ax.get_ylim()
+            
+#             ratio = ymax / ymin
+            
+#             if ratio < 5:
+#                 # Extremely narrow range: override with linear locators to prevent tick starvation
+#                 ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
+#             elif ratio < 100:
+#                 # Medium range: restrict subdivisions to 1, 2, and 5 to prevent text collision
+#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
+#             elif ratio < 1000:
+#                 # Wide range: restrict subdivisions to 1 and 5
+#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 5.0)))
+#             else:
+#                 # Very wide range: utilize only major powers of 10
+#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
+            
+#             # Format major ticks to standard notation and suppress minor labels
+#             ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
+#             ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+#         else:
+#             ax.set_yscale("linear")
+
+#     configure_axis(ax1)
+#     configure_axis(ax2)
+
+#     if show_hyperparams and hyperparams:
+#         param_text = "\n".join(f"{k}: {v}" for k, v in hyperparams.items())
+#         fig.subplots_adjust(bottom=0.28, wspace=0.25)
+#         fig.text(
+#             0.5, 0.02,
+#             f"Hyperparameters\n{param_text}",
+#             ha="center",
+#             va="bottom",
+#             fontsize=11,
+#             bbox=dict(
+#                 boxstyle="round,pad=0.45",
+#                 facecolor="white",
+#                 edgecolor="0.7",
+#                 alpha=0.9
+#             ),
+#         )
+#     else:
+#         fig.tight_layout()
+
+#     return fig, (ax1, ax2)
+
+def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
+    """
+    Plot training/validation curves with a vertical indicator for the optimal saved epoch.
+    Optimized for physical poster presentation. Hyperparameter overlays removed for compliance 
+    with academic poster standards.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    import numpy as np
+
+    # Enforce strict poster-grade typographic scale
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.size": 16,
+        "axes.titlesize": 22,
+        "axes.labelsize": 18,
+        "axes.linewidth": 2,
+        "legend.fontsize": 14,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "xtick.major.width": 2,
+        "ytick.major.width": 2,
+    })
 
     epochs = range(len(metrics["train_mse"]))
 
@@ -104,23 +216,50 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
-    # MSE Plot
-    ax1.plot(epochs, train_mse, label="Train MSE", linewidth=2.2, alpha=1)
-    ax1.plot(epochs, val_mse, label="Validation MSE", linewidth=2.2, alpha=0.5)
-    ax1.set_title("Reconstruction Loss (MSE)")
-    ax1.set_xlabel("Epoch", fontsize=15)
-    ax1.set_ylabel("MSE", fontsize=15)
-    ax1.legend(frameon=True)
-    ax1.grid(True, which="both", linestyle="--", alpha=0.6)
+    # Professional color palette
+    train_color = "#1f77b4"
+    val_color = "#d62728"
+    optimum_color = "#2ca02c"
+
+    # Isolate optimum point mapping directly to the saved state matrix
+    best_epoch = None
+    if "total_val_loss" in metrics:
+        best_epoch = np.argmin(metrics["total_val_loss"])
+
+    # MSE Plot - Train uses a thicker line and lower zorder; Val uses a thinner line and higher zorder
+    ax1.plot(epochs, train_mse, label="Train MSE", color=train_color, linewidth=4, alpha=1, zorder=2)
+    ax1.plot(epochs, val_mse, label="Validation MSE", color=val_color, linewidth=2, alpha=0.5, zorder=3)
+    ax1.set_title("Reconstruction Loss (MSE)", pad=15)
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("MSE")
 
     # KLD Plot
-    ax2.plot(epochs, train_kld, label="Train KLD", linewidth=2.2, alpha=1)
-    ax2.plot(epochs, val_kld, label="Validation KLD", linewidth=2.2, alpha=0.5)
-    ax2.set_title("Latent Divergence (KLD)")
-    ax2.set_xlabel("Epoch", fontsize=15)
-    ax2.set_ylabel("KLD", fontsize=15)
-    ax2.legend(frameon=True)
-    ax2.grid(True, which="both", linestyle="--", alpha=0.6)
+    ax2.plot(epochs, train_kld, label="Train KLD", color=train_color, linewidth=4, alpha=1, zorder=2)
+    ax2.plot(epochs, val_kld, label="Validation KLD", color=val_color, linewidth=2, alpha=0.5, zorder=3)
+    ax2.set_title("Latent Divergence (KLD)", pad=15)
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("KLD")
+
+    # Clean axes and apply target overlay
+    for ax in (ax1, ax2):
+        if best_epoch is not None:
+            ax.axvline(x=best_epoch, color=optimum_color, linestyle="--", linewidth=2.5, alpha=1.0, zorder=1, label=f"Optimum (Epoch {best_epoch})")
+            
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, which="major", linestyle="-", alpha=0.15, color='black')
+        
+        # Deduplicate redundant legend labels and anchor position
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(
+            by_label.values(), 
+            by_label.keys(), 
+            loc="upper right", 
+            frameon=True, 
+            framealpha=0.9, 
+            edgecolor="0.8"
+        )
 
     # Dynamic Axis Configuration
     def configure_axis(ax):
@@ -131,19 +270,14 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
             ratio = ymax / ymin
             
             if ratio < 5:
-                # Extremely narrow range: override with linear locators to prevent tick starvation
                 ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
             elif ratio < 100:
-                # Medium range: restrict subdivisions to 1, 2, and 5 to prevent text collision
                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
             elif ratio < 1000:
-                # Wide range: restrict subdivisions to 1 and 5
                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 5.0)))
             else:
-                # Very wide range: utilize only major powers of 10
                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
             
-            # Format major ticks to standard notation and suppress minor labels
             ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
             ax.yaxis.set_minor_formatter(ticker.NullFormatter())
         else:
@@ -152,25 +286,7 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
     configure_axis(ax1)
     configure_axis(ax2)
 
-    if show_hyperparams and hyperparams:
-        param_text = "\n".join(f"{k}: {v}" for k, v in hyperparams.items())
-        fig.subplots_adjust(bottom=0.28, wspace=0.25)
-        fig.text(
-            0.5, 0.02,
-            f"Hyperparameters\n{param_text}",
-            ha="center",
-            va="bottom",
-            fontsize=11,
-            bbox=dict(
-                boxstyle="round,pad=0.45",
-                facecolor="white",
-                edgecolor="0.7",
-                alpha=0.9
-            ),
-        )
-    else:
-        fig.tight_layout()
-
+    fig.tight_layout()
     return fig, (ax1, ax2)
 
 
@@ -250,12 +366,12 @@ def visualize_latent_space(
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Instantiate and load the VAE architecture[cite: 3]
+    # Instantiate and load the VAE architecture
     model = VAE().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # Retrieve validation data, isolating star_age using condition_cols=[2][cite: 5]
+    # Retrieve validation data, isolating star_age using condition_cols=[2]
     _, val_loader, _ = get_dataloaders(condition_cols=[2])
 
     latent_vectors = []
@@ -265,7 +381,7 @@ def visualize_latent_space(
         for data, condition in val_loader:
             data = data.to(device)
             
-            # Flatten input to match VAE encoder dimension requirements[cite: 5]
+            # Flatten input to match VAE encoder dimension requirements
             data_flat = data.view(data.size(0), -1)
             
             mu, _ = model.encode(data_flat)
@@ -327,6 +443,117 @@ def visualize_latent_space(
     plt.show()
 
     return fig, ax
+
+def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_examples=3):
+    """
+    Computes per-sample MSE, sorts the distributions, and renders a diagnostic matrix 
+    comparing the best, worst, and average reconstructions.
+    """
+    model.eval()
+    all_originals = []
+    all_reconstructions = []
+    all_mses = []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            # Handle dataloaders that yield (data, target) or just data
+            x = batch[0] if isinstance(batch, (list, tuple)) else batch
+            x = x.to(device)
+            
+            # Flatten [batch_size, 60, 2] -> [batch_size, 120]
+            x_flat = x.view(x.size(0), -1)
+            
+            recon, _, _ = model(x_flat)
+            
+            # Compute MSE per sample: reduce along feature dimension, retain batch dimension
+            mse_per_sample = F.mse_loss(recon, x_flat, reduction='none').mean(dim=1)
+            
+            all_originals.append(x_flat.cpu())
+            all_reconstructions.append(recon.cpu())
+            all_mses.append(mse_per_sample.cpu())
+
+    # Aggregate tensors
+    originals = torch.cat(all_originals, dim=0).numpy()
+    reconstructions = torch.cat(all_reconstructions, dim=0).numpy()
+    mses = torch.cat(all_mses, dim=0).numpy()
+
+    # Sort indices by error magnitude
+    sorted_indices = np.argsort(mses)
+    
+    total_samples = len(sorted_indices)
+    best_indices = sorted_indices[:num_examples]
+    worst_indices = sorted_indices[-num_examples:]
+    
+    # Extract median bounds
+    mid_point = total_samples // 2
+    half_window = num_examples // 2
+    avg_indices = sorted_indices[mid_point - half_window : mid_point - half_window + num_examples]
+
+    categories = [
+        ("Highest Fidelity (Lowest MSE)", best_indices),
+        ("Median Fidelity (Average MSE)", avg_indices),
+        ("Lowest Fidelity (Highest MSE)", worst_indices)
+    ]
+
+    _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples)
+
+
+def _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples):
+    """
+    Renders a structural grid comparing original and reconstructed profiles.
+    Reshapes flat vectors to physical profiles to expose structural deviation mechanics.
+    """
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.size": 10,
+        "axes.titlesize": 12,
+        "axes.labelsize": 10,
+        "legend.fontsize": 9,
+    })
+
+    fig, axes = plt.subplots(len(categories), num_examples, figsize=(15, 10))
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    for row_idx, (title, indices) in enumerate(categories):
+        for col_idx, idx in enumerate(indices):
+            ax = axes[row_idx, col_idx]
+            
+            orig = originals[idx]
+            recon = reconstructions[idx]
+            error = mses[idx]
+
+            # Reshape from [120] -> [60, 2] to isolate specific physical features
+            orig_reshaped = orig.reshape(num_profile_points, len(profile_features))
+            recon_reshaped = recon.reshape(num_profile_points, len(profile_features))
+
+            x_axis = np.arange(num_profile_points)
+
+            # Mass Plotting
+            ax.plot(x_axis, orig_reshaped[:, 0], color='blue', linestyle='-', label=f'Orig {profile_features[0]}', alpha=0.8)
+            ax.plot(x_axis, recon_reshaped[:, 0], color='cyan', linestyle='--', label=f'Recon {profile_features[0]}', alpha=0.8)
+            
+            # logT Plotting
+            ax.plot(x_axis, orig_reshaped[:, 1], color='red', linestyle='-', label=f'Orig {profile_features[1]}', alpha=0.8)
+            ax.plot(x_axis, recon_reshaped[:, 1], color='orange', linestyle='--', label=f'Recon {profile_features[1]}', alpha=0.8)
+
+            if col_idx == 1:
+                ax.set_title(f"{title}\nSample {idx} | MSE: {error:.4f}")
+            else:
+                ax.set_title(f"Sample {idx} | MSE: {error:.4f}")
+
+            ax.set_xlabel("Profile Point Index")
+            ax.set_ylabel("Normalized Value")
+            
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.grid(True, linestyle=':', alpha=0.6)
+
+            if row_idx == 0 and col_idx == 0:
+                ax.legend(loc='best', framealpha=0.9)
+
+    plt.tight_layout()
+    plt.show()
+
 
 '''Test class for RDP Algorithm'''
 
