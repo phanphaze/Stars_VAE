@@ -63,119 +63,6 @@ def varify_rdp(df, processed_df):
     plt.grid(True)
     plt.show()
 
-
-# def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=None, figsize=(15, 5)):
-#     """
-#     Plot training/validation MSE and KLD curves.
-#     """
-#     plt.rcParams.update({
-#         "font.size": 14,
-#         "axes.titlesize": 18,
-#         "axes.labelsize": 16,
-#         "legend.fontsize": 12,
-#         "xtick.labelsize": 12,
-#         "ytick.labelsize": 12,
-#     })
-
-#     if hyperparams is None:
-#         try:
-#             from src.config import beta_value, latent_dimension_size, batch_size, Learning_rate, lambda_value, num_profile_points
-#             hyperparams = {
-#                 "beta": beta_value,
-#                 "latent_dim": latent_dimension_size,
-#                 "learning rate": Learning_rate,
-#                 "batch_size": batch_size,
-#                 "lambda_val": lambda_value,
-#                 "num_profile_points": num_profile_points
-#             }
-#         except Exception:
-#             hyperparams = {}
-
-#     epochs = range(len(metrics["train_mse"]))
-
-#     train_mse = np.asarray(metrics["train_mse"], dtype=float)
-#     val_mse = np.asarray(metrics["val_mse"], dtype=float)
-#     train_kld = np.asarray(metrics["train_kld"], dtype=float)
-#     val_kld = np.asarray(metrics["val_kld"], dtype=float)
-
-#     if log_scale:
-#         eps = 1e-12
-#         train_mse = np.clip(train_mse, eps, None)
-#         val_mse = np.clip(val_mse, eps, None)
-#         train_kld = np.clip(train_kld, eps, None)
-#         val_kld = np.clip(val_kld, eps, None)
-
-#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-
-#     # MSE Plot
-#     ax1.plot(epochs, train_mse, label="Train MSE", linewidth=2.2, alpha=1)
-#     ax1.plot(epochs, val_mse, label="Validation MSE", linewidth=2.2, alpha=0.5)
-#     ax1.set_title("Reconstruction Loss (MSE)")
-#     ax1.set_xlabel("Epoch", fontsize=15)
-#     ax1.set_ylabel("MSE", fontsize=15)
-#     ax1.legend(frameon=True)
-#     ax1.grid(True, which="both", linestyle="--", alpha=0.6)
-
-#     # KLD Plot
-#     ax2.plot(epochs, train_kld, label="Train KLD", linewidth=2.2, alpha=1)
-#     ax2.plot(epochs, val_kld, label="Validation KLD", linewidth=2.2, alpha=0.5)
-#     ax2.set_title("Latent Divergence (KLD)")
-#     ax2.set_xlabel("Epoch", fontsize=15)
-#     ax2.set_ylabel("KLD", fontsize=15)
-#     ax2.legend(frameon=True)
-#     ax2.grid(True, which="both", linestyle="--", alpha=0.6)
-
-#     # Dynamic Axis Configuration
-#     def configure_axis(ax):
-#         if log_scale:
-#             ax.set_yscale("log")
-#             ymin, ymax = ax.get_ylim()
-            
-#             ratio = ymax / ymin
-            
-#             if ratio < 5:
-#                 # Extremely narrow range: override with linear locators to prevent tick starvation
-#                 ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=6))
-#             elif ratio < 100:
-#                 # Medium range: restrict subdivisions to 1, 2, and 5 to prevent text collision
-#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
-#             elif ratio < 1000:
-#                 # Wide range: restrict subdivisions to 1 and 5
-#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 5.0)))
-#             else:
-#                 # Very wide range: utilize only major powers of 10
-#                 ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
-            
-#             # Format major ticks to standard notation and suppress minor labels
-#             ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
-#             ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-#         else:
-#             ax.set_yscale("linear")
-
-#     configure_axis(ax1)
-#     configure_axis(ax2)
-
-#     if show_hyperparams and hyperparams:
-#         param_text = "\n".join(f"{k}: {v}" for k, v in hyperparams.items())
-#         fig.subplots_adjust(bottom=0.28, wspace=0.25)
-#         fig.text(
-#             0.5, 0.02,
-#             f"Hyperparameters\n{param_text}",
-#             ha="center",
-#             va="bottom",
-#             fontsize=11,
-#             bbox=dict(
-#                 boxstyle="round,pad=0.45",
-#                 facecolor="white",
-#                 edgecolor="0.7",
-#                 alpha=0.9
-#             ),
-#         )
-#     else:
-#         fig.tight_layout()
-
-#     return fig, (ax1, ax2)
-
 def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
     """
     Plot training/validation curves with a vertical indicator for the optimal saved epoch.
@@ -312,8 +199,6 @@ def plot_profile_reconstruction(
     _, val_loader, _ = get_dataloaders(condition_cols=[2])
     real_profile = next(iter(val_loader))[0][0].numpy()
 
-    real_profile = real_profile[real_profile[:, 0].argsort()]
-
     # Dynamically assign feature names from config
     feature_x = profile_features[0]
     feature_y = profile_features[1]
@@ -334,8 +219,6 @@ def plot_profile_reconstruction(
 
     synthetic_profile[:, 0] = unscaled_x.flatten()
     synthetic_profile[:, 1] = unscaled_y.flatten()
-
-    synthetic_profile = synthetic_profile[synthetic_profile[:, 0].argsort()]
 
     fig, ax = plt.subplots(figsize=(10, 8))
     
