@@ -104,8 +104,8 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
     # MSE Plot
-    ax1.plot(epochs, train_mse, label="Train MSE", linewidth=2.2)
-    ax1.plot(epochs, val_mse, label="Validation MSE", linewidth=2.2)
+    ax1.plot(epochs, train_mse, label="Train MSE", linewidth=2.2, alpha=1)
+    ax1.plot(epochs, val_mse, label="Validation MSE", linewidth=2.2, alpha=0.5)
     ax1.set_title("Reconstruction Loss (MSE)")
     ax1.set_xlabel("Epoch", fontsize=15)
     ax1.set_ylabel("MSE", fontsize=15)
@@ -113,8 +113,8 @@ def plot_loss_curve(metrics, log_scale=True, show_hyperparams=True, hyperparams=
     ax1.grid(True, which="both", linestyle="--", alpha=0.6)
 
     # KLD Plot
-    ax2.plot(epochs, train_kld, label="Train KLD", linewidth=2.2)
-    ax2.plot(epochs, val_kld, label="Validation KLD", linewidth=2.2)
+    ax2.plot(epochs, train_kld, label="Train KLD", linewidth=2.2, alpha=1)
+    ax2.plot(epochs, val_kld, label="Validation KLD", linewidth=2.2, alpha=0.5)
     ax2.set_title("Latent Divergence (KLD)")
     ax2.set_xlabel("Epoch", fontsize=15)
     ax2.set_ylabel("KLD", fontsize=15)
