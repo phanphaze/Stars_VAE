@@ -21,32 +21,40 @@ class VAE(nn.Module):  # Variational Autoencoder
 
         self.encoder = nn.Sequential(
             nn.Linear(self.input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            # nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(0.2),
 
             nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
+            # nn.BatchNorm1d(hidden_dim // 2),
             nn.LeakyReLU(0.2),
 
             nn.Linear(hidden_dim // 2, hidden_dim // 4),
-            nn.BatchNorm1d(hidden_dim // 4),
+            # nn.BatchNorm1d(hidden_dim // 4),
+            nn.LeakyReLU(0.2),
+
+            nn.Linear(hidden_dim // 4, hidden_dim // 8),
+            # nn.BatchNorm1d(hidden_dim // 8),
             nn.LeakyReLU(0.2)
-        )
+)
         
-        self.fc_mu = nn.Linear(hidden_dim // 4, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim // 4, latent_dim)
+        self.fc_mu = nn.Linear(hidden_dim // 8, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim // 8, latent_dim)
 
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 4),
-            nn.BatchNorm1d(hidden_dim // 4),
+            nn.Linear(latent_dim, hidden_dim // 8),
+            # nn.BatchNorm1d(hidden_dim // 8 ),
+            nn.LeakyReLU(0.2),
+
+            nn.Linear(hidden_dim // 8, hidden_dim // 4),
+            # nn.BatchNorm1d(hidden_dim // 4),
             nn.LeakyReLU(0.2),
 
             nn.Linear(hidden_dim // 4, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
+            # nn.BatchNorm1d(hidden_dim // 2),
             nn.LeakyReLU(0.2),
 
             nn.Linear(hidden_dim // 2, hidden_dim ),
-            nn.BatchNorm1d(hidden_dim),
+            # nn.BatchNorm1d(hidden_dim),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, output_dim)
         )
