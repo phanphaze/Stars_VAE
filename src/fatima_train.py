@@ -48,7 +48,6 @@ class VAE(nn.Module):
  
     def decoder(self, z):
         a = nn.ReLU()(self.z_2hid(z))
-        # Linear output -- logT is not bounded in [0,1], so no sigmoid here.
         return self.hid_2out(a)
  
     def forward(self, x):
@@ -58,8 +57,8 @@ class VAE(nn.Module):
         return x_reconstructed, mu, sigma
  
 if __name__ == "__main__":
-    input_dimension = 2 * profs_shape   # mass enclosed + temperature
-    output_dimension = profs_shape      # temperature only
+    input_dimension = 2 * profs_shape   
+    output_dimension = profs_shape      
  
     # ---- Sanity check with fake data ----
     x = torch.randn(4, input_dimension)
@@ -77,8 +76,7 @@ if __name__ == "__main__":
     hidden_dimension = 200
     z_dimension = 20
  
-    # --- `profs` must exist before this point. Load your real data here: ---
-    #profs = np.load("/work/nvme/bhvr/fatimasyed7/Stars_VAE/data/processed/processed_data.npy", allow_pickle=True)
+    
     profs = np.load("/work/nvme/bhvr/fatimasyed7/Stars_VAE/data/processed/processed_data.npy", allow_pickle=True)
     print(type(profs))
     print(profs.shape)

@@ -239,7 +239,6 @@ def rdp_preprocess(raw_df, num_profile_points=num_profile_points, split_feature=
 # import pandas as pd
 # from src.config import num_profile_points, split_feature, profile_features
 # from src.preprocessing import fit_preprocess_scalers, process_simulation
-
 # def rdp_preprocess(raw_df, split_feature=split_feature, profile_features=profile_features, num_profile_points=num_profile_points):
 # # Normalized minmax scaled (between 0 & 1)
 # 	normalized_df = fit_preprocess_scalers(raw_df, profile_features + [split_feature], True, False)

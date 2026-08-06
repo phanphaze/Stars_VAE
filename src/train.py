@@ -10,7 +10,6 @@ from src.model import CAE, VAE
 from src.utils import save_model
 from src.config import beta_value, Learning_rate, num_epochs, early_stopping_min_delta, early_stopping_patience, lambda_value
 
-
 def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value):
     # Reconstruction Loss
     mse = F.mse_loss(reconstructed, original, reduction="sum")
@@ -114,7 +113,7 @@ def train_model(data, model="VAE"):
             f"Epoch {epoch} | Train MSE: {train_mse_loss:.4f} | Train KLD: {train_kld_loss:.4f} | Gap: {gap_mse:.4f} | Total Train: {total_train_loss}"
         )
         print(
-            f"      {' ' * (len(str(epoch)))} | Val MSE: {val_mse_loss:.4f} | Val KLD: {val_kld_loss:.4f} | Gap: {gap_kld:.4f} | Total Val: {total_val_loss}"
+            f"      {" " * (len(str(epoch)))} | Val MSE: {val_mse_loss:.4f} | Val KLD: {val_kld_loss:.4f} | Gap: {gap_kld:.4f} | Total Val: {total_val_loss}"
         )
         if patience_counter >= early_stopping_patience:
             print("Early stopping triggered: train/validation divergence is increasing.")
