@@ -4,7 +4,7 @@ from pathlib import Path
 # Hyperparameters
 
 # rdp preprocessing attributes
-profile_features = ['mass', 'logT'] #features to be used for training
+profile_features = ['mass', 'logT', 'luminosity', 'logP'] #features to be used for training
 split_feature = 'star_age'
 num_profile_points = 60
 
@@ -17,7 +17,7 @@ gamma_value = 10 # weight of smoothness loss
 
 # =1 for standard proibalistic training, 
 # >1 for clean and separate feature learning)
-beta_value = 0 # weight of KL divergence , optimal is .175
+beta_value = .175 # weight of KL divergence , optimal is .175
 lambda_value = 1 # weight of MSE divergence
 
 # early stopping attributes

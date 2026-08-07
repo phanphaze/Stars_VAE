@@ -166,13 +166,6 @@ def train_model(data, model="VAE", beta=beta_value, gamma=gamma_value, verbose=T
 
     save_model(model, verbose=verbose)
 
-    evaluate_reconstruction_variance(
-        data=data,
-        model=model, 
-        dataloader=val_loader, 
-        device=device
-    )
-
     return metrics
 
 if __name__ == "__main__":
