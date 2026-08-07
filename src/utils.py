@@ -224,19 +224,22 @@ def _get_default_model_and_loader(data, split="test"):
 def plot_profile_reconstruction(
     data,
     scalers, 
+    title="Test Set Profile Reconstruction",
     model=None,
     dataloader=None,
-    split="test",
-    title=f"Set Profile Reconstruction",
+    split="test"
 ):
     """
     Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
     Scales dynamically to n-dimensional feature configurations via subplot arrays.
     """
     from src.config import profile_features, num_profile_points
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
+    import torch
+    
     features = len(profile_features)
-
-    title = f"{split[0].upper()}{split[1:]} {title}" 
 
     if model is None or dataloader is None:
         d_model, d_loader, _ = _get_default_model_and_loader(data, split)
@@ -244,6 +247,7 @@ def plot_profile_reconstruction(
         dataloader = dataloader or d_loader
 
     device = next(model.parameters()).device
+    model.eval()
     
     batch = next(iter(dataloader))
     real_profile_scaled = batch[0][0].numpy()
@@ -270,8 +274,11 @@ def plot_profile_reconstruction(
     num_subplots = max(1, features - 1)
     fig, axes = plt.subplots(1, num_subplots, figsize=(8 * num_subplots, 6))
     
+    # Enforce iterable array architecture for single-subplot generation
     if num_subplots == 1:
         axes = [axes]
+    elif hasattr(axes, "flatten"):
+        axes = axes.flatten()
         
     feature_x = profile_features[0]
     
@@ -280,7 +287,7 @@ def plot_profile_reconstruction(
         ax = axes[i - 1]
         
         ax.plot(real_profile_unscaled[:, 0], real_profile_unscaled[:, i], label="Real Profile", color="black", linewidth=2.5)
-        ax.plot(synthetic_profile_unscaled[:, 0], synthetic_profile_unscaled[:, i], label="Synthetic Profile", color="#ff7f0e", marker="o", markersize=4, linestyle="None", alpha=0.8)
+        ax.plot(synthetic_profile_unscaled[:, 0], synthetic_profile_unscaled[:, i], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
         
         ax.set_title(f"{feature_y} vs {feature_x}", fontsize=18)
         ax.set_xlabel(feature_x, fontsize=16) 
