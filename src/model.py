@@ -1,152 +1,179 @@
-# file where the model architecture is defined
+ # File where the model is trained
+
+from tabnanny import verbose
 
 import torch
 import torch.nn as nn
-from src.config import latent_dimension_size, input_dimension_size, output_dimension_size, hidden_dimension_1_size
-from torchvision import datasets 
-from torchvision import transforms 
+import torch.nn.functional as F
+import numpy as np
+import copy
 
-class VAE(nn.Module):  # Variational Autoencoder
-    def __init__(
-        self,
-        input_dim: int = input_dimension_size,
-        latent_dim: int = latent_dimension_size,
-        output_dim: int = output_dimension_size    
-    ):
-        super(VAE, self).__init__()
-        self.input_dim = input_dim
-        self.latent_dim = latent_dim
-        self.output_dim = output_dim
-        hidden_dim = hidden_dimension_1_size
+from src.dataset import get_dataloaders
+from src.model import CAE, VAE
+from src.utils import save_model, evaluate_reconstruction_variance
+from src.config import beta_value, Learning_rate, num_epochs, early_stopping_min_delta, early_stopping_patience, lambda_value, model_save_dir
 
-        self.encoder = nn.Sequential(
-            nn.Linear(self.input_dim, hidden_dim),
-            # nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
+def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value):
+    # Reconstruction Loss
+    mse = F.mse_loss(reconstructed, original, reduction="sum")
 
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            # nn.BatchNorm1d(hidden_dim // 2),
-            nn.LeakyReLU(0.2),
+    # Kullback-Leibler Divergence
+    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-            nn.Linear(hidden_dim // 2, hidden_dim // 4),
-            # nn.BatchNorm1d(hidden_dim // 4),
-            nn.LeakyReLU(0.2),
+    total_loss = (lambda_value * mse) + (beta * kld)
 
-            nn.Linear(hidden_dim // 4, hidden_dim // 8),
-            # nn.BatchNorm1d(hidden_dim // 8),
-            nn.LeakyReLU(0.2)
-)
+    # data_loss = (lambda_value * mse) + (beta * kld)
+    # pde_loss = ...
+    # ic_loss = ...
+    # bc_loss = ...
+    # total_loss = data_loss + pde_loss + ic_loss + bc_loss
+    
+    return total_loss, mse, kld
+
+
+def train_model(data, model="VAE", beta=beta_value, verbose=True):
+    train_loader, val_loader, test_loader = get_dataloaders(data, condition_cols=[2])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if verbose:
+        print(f"Training on device: {device}")
+
+    # update when new models are added
+    if model == "VAE":
+        model = VAE().to(device)
+    else:
+        model = CAE().to(device)
+
+    if verbose:
+        print(f"Model: {model}")
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=Learning_rate)
+
+    # Cosine Annealing Scheduler
+    # T_max set to num_epochs to stretch the descent curve over the full training duration.
+    # eta_min enforces a non-zero terminal state to prevent premature convergence into local optima.
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=Learning_rate * 0.01)
+
+    metrics = {
+        "train_mse": [],
+        "train_kld": [],
+        "val_mse": [],
+        "val_kld": [],
+        "total_val_loss": [],
+    }
+
+    prev_gap = None
+    patience_counter = 0
+    anneal_epochs = num_epochs * 0.25
+
+    best_val_loss = float('inf')
+    best_model_state = None
+
+    for epoch in range(num_epochs):
+        model.train()
+
+        running_train_mse = 0.0
+        running_train_kld = 0.0
+
+        for data, _ in train_loader:
+            data = data.to(device)
+
+            # Flatten [batch_size, 60, 2] to [batch_size, 120]
+            data_flat = data.view(data.size(0), -1)
+
+            reconstructed, mu, logvar = model(data_flat)
+            loss, mse, kld = vae_loss_function(reconstructed, data_flat, mu, logvar, beta=beta)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            running_train_mse += mse.item() / len(data)
+            running_train_kld += kld.item() / len(data)
+
+        metrics["train_mse"].append(running_train_mse / len(train_loader))
+        metrics["train_kld"].append(running_train_kld / len(train_loader))
+
+        model.eval()
+        running_val_mse = 0.0
+        running_val_kld = 0.0
+
+        with torch.no_grad():
+            for data, _ in val_loader:
+                data = data.to(device)
+
+                # Flatten [batch_size, 60, 2] to [batch_size, 120]
+                data_flat = data.view(data.size(0), -1)
+
+                reconstructed, mu, logvar = model(data_flat)        
+
+                loss, mse, kld = vae_loss_function(reconstructed, data_flat, mu, logvar, beta=beta)
+                running_val_mse += mse.item() / len(data)
+                running_val_kld += kld.item() / len(data)
+
+        metrics["val_mse"].append(running_val_mse / len(val_loader))
+        metrics["val_kld"].append(running_val_kld / len(val_loader))
+
+        train_mse_loss = metrics["train_mse"][-1]
+        val_mse_loss = metrics["val_mse"][-1]   
+        train_kld_loss = metrics["train_kld"][-1]
+        val_kld_loss = metrics["val_kld"][-1]
+
+        total_train_loss = (lambda_value * train_mse_loss) + (beta * train_kld_loss)
+        total_val_loss = (lambda_value * val_mse_loss) + (beta * val_kld_loss)
         
-        self.fc_mu = nn.Linear(hidden_dim // 8, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim // 8, latent_dim)
+        metrics["total_val_loss"].append(total_val_loss)
 
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 8),
-            # nn.BatchNorm1d(hidden_dim // 8 ),
-            nn.LeakyReLU(0.2),
+        if total_val_loss < best_val_loss:
+            best_val_loss = total_val_loss
+            best_model_state = copy.deepcopy(model.state_dict())
+            epoch_marker = "*"
+        else:
+            epoch_marker = " "
 
-            nn.Linear(hidden_dim // 8, hidden_dim // 4),
-            # nn.BatchNorm1d(hidden_dim // 4),
-            nn.LeakyReLU(0.2),
+        gap_mse = abs(train_mse_loss - val_mse_loss)
+        gap_kld = abs(train_kld_loss - val_kld_loss)
+        gap = gap_kld + gap_mse
 
-            nn.Linear(hidden_dim // 4, hidden_dim // 2),
-            # nn.BatchNorm1d(hidden_dim // 2),
-            nn.LeakyReLU(0.2),
+        if prev_gap is not None and gap > prev_gap + early_stopping_min_delta:
+            patience_counter += 1
+        else:
+            patience_counter = 0
 
-            nn.Linear(hidden_dim // 2, hidden_dim ),
-            # nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, output_dim)
-        )
+        prev_gap = gap
+        current_lr = scheduler.get_last_lr()[0]
 
-    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-    
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden = self.encoder(x)
-        mu = self.fc_mu(hidden)
-        logvar = self.fc_logvar(hidden)
-        return mu, logvar
-    
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return self.decoder(z)
-    
-    def forward(
-        self,
-        x: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
-        decoded = self.decode(z)
-        return decoded, mu, logvar
+        if verbose:
+            print(
+                f"Epoch {epoch} {epoch_marker}| LR: {current_lr:.2f} | Train MSE: {train_mse_loss:.4f} | Train KLD: {train_kld_loss:.4f} | Gap: {gap_mse:.4f} | Total Train: {total_train_loss:.4f}"
+            )
+            lr_str = f"  LR: {current_lr:.2f} "
+            padding = ' ' * (len(str(epoch)) + len(lr_str))
+            print(
+                f"      {padding}  | Val MSE: {val_mse_loss:.4f} | Val KLD: {val_kld_loss:.4f} | Gap: {gap_kld:.4f} | Total Val: {total_val_loss:.4f}"
+            )
+
+        scheduler.step()
+
+        if patience_counter >= early_stopping_patience:
+            print("Early stopping triggered: train/validation divergence is increasing.")
+            break
+
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        if verbose:
+            print(f"Restored optimum matrix state mapping to Validation Loss: {best_val_loss:.4f}")
+
+    save_model(model, verbose=verbose)
+
+    evaluate_reconstruction_variance(
+        model=model, 
+        dataloader=val_loader, 
+        device=device
+    )
+
+    return metrics
 
 
-class CAE(nn.Module):  # Conditional Autoencoder
-    def __init__(
-        self,
-        input_dim: int,
-        condition_dim: int,
-        latent_dim: int = latent_dimension_size,
-    ):
-        super(CAE, self).__init__()
-
-        self.input_dim = input_dim
-        self.condition_dim = condition_dim
-        self.latent_dim = latent_dim
-
-		# input + condition -> hidden 1 -> (mu, logvar) -> z -> z + condition -> hidden 2 -> output
-        hidden_dim = max(input_dim * 2, 256)
-        
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim + condition_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
-            
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
-            nn.LeakyReLU(0.2),
-        )
-
-        self.fc_mu = nn.Linear(hidden_dim // 2, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim // 2, latent_dim)
-
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim + condition_dim, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
-            nn.LeakyReLU(0.2),
-            
-            nn.Linear(hidden_dim // 2, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(0.2),
-            
-            nn.Linear(hidden_dim, input_dim),
-        )
-
-    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
-    def encode(self, x: torch.Tensor, c: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        x_cond = torch.cat([x, c], dim=-1)
-        hidden = self.encoder(x_cond)
-        mu = self.fc_mu(hidden)
-        logvar = self.fc_logvar(hidden)
-        return mu, logvar
-
-    def decode(self, z: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        z_cond = torch.cat([z, c], dim=-1)
-        return self.decoder(z_cond)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        c: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        mu, logvar = self.encode(x, c)
-        z = self.reparameterize(mu, logvar)
-        decoded = self.decode(z, c)
-        return decoded, mu, logvar
-
+if __name__ == "__main__":
+    train_model("VAE")
