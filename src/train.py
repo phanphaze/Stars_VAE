@@ -117,23 +117,18 @@ def train_model(data, model="VAE", beta=beta_value, verbose=True):
         
         metrics["total_val_loss"].append(total_val_loss)
 
-        if total_val_loss < best_val_loss:
+        # Enforce early stopping delta threshold against total objective loss
+        if total_val_loss < best_val_loss - early_stopping_min_delta:
             best_val_loss = total_val_loss
             best_model_state = copy.deepcopy(model.state_dict())
             epoch_marker = "*"
+            patience_counter = 0
         else:
             epoch_marker = " "
+            patience_counter += 1
 
         gap_mse = abs(train_mse_loss - val_mse_loss)
         gap_kld = abs(train_kld_loss - val_kld_loss)
-        gap = gap_kld + gap_mse
-
-        if prev_gap is not None and gap > prev_gap + early_stopping_min_delta:
-            patience_counter += 1
-        else:
-            patience_counter = 0
-
-        prev_gap = gap
         current_lr = scheduler.get_last_lr()[0]
 
         if verbose:
@@ -147,7 +142,8 @@ def train_model(data, model="VAE", beta=beta_value, verbose=True):
         scheduler.step()
 
         if patience_counter >= early_stopping_patience:
-            print("Early stopping triggered: train/validation divergence is increasing.")
+            if verbose:
+                print("Early stopping triggered: Validation loss failed to improve by minimum delta.")
             break
 
     if best_model_state is not None:
