@@ -192,45 +192,80 @@ def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
     fig.tight_layout()
     return fig, (ax1, ax2)
 
+def _get_default_model_and_loader(data, split="test"):
+    """
+    Automatically instantiates the VAE architecture, loads terminal matrix states,
+    and isolates the requested data partition.
+    """
+    from src.model import VAE
+    from src.dataset import get_dataloaders
+    from src.config import profile_features, model_save_dir
+    import torch
+    
+    features = len(profile_features)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    model = VAE().to(device)
+    model.load_state_dict(torch.load(model_save_dir / "variational_autoencoder.pth", map_location=device))
+    model.eval()
+
+    train_loader, val_loader, test_loader = get_dataloaders(data=data, condition_cols=[features])
+    
+    if split == "test":
+        loader = test_loader
+    elif split == "val":
+        loader = val_loader
+    else:
+        loader = train_loader
+        
+    return model, loader, device
+
 
 def plot_profile_reconstruction(
+    data,
     scalers, 
-    title="Test Set Profile Reconstruction",
-    model_path=model_save_dir / "variational_autoencoder.pth", 
-    points=num_profile_points
+    model=None,
+    dataloader=None,
+    split="test",
+    title=f"Set Profile Reconstruction",
 ):
     """
     Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
     Scales dynamically to n-dimensional feature configurations via subplot arrays.
     """
-    from src.config import profile_features
+    from src.config import profile_features, num_profile_points
     features = len(profile_features)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    title = f"{split[0].upper()}{split[1:]} {title}" 
+
+    if model is None or dataloader is None:
+        d_model, d_loader, _ = _get_default_model_and_loader(data, split)
+        model = model or d_model
+        dataloader = dataloader or d_loader
+
+    device = next(model.parameters()).device
     
-    model = VAE().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
-
-    # Isolate the test loader sequence for final evaluation
-    _, _, test_loader = get_dataloaders(condition_cols=[features])
-    real_profile = next(iter(test_loader))[0][0].numpy()
-
-    scaled_features = []
-    for i, feature_name in enumerate(profile_features):
-        scaled_col = scalers[feature_name].transform(pd.DataFrame(real_profile[:, i], columns=[feature_name]))
-        scaled_features.append(scaled_col)
-        
-    scaled_real_profile = np.hstack(scaled_features)
-    real_profile_flat = torch.from_numpy(scaled_real_profile).float().view(1, -1).to(device)
+    batch = next(iter(dataloader))
+    real_profile_scaled = batch[0][0].numpy()
+    
+    real_profile_tensor = torch.from_numpy(real_profile_scaled).float().view(1, -1).to(device)
     
     with torch.no_grad():
-        reconstructed_flat, _, _ = model(real_profile_flat)
+        reconstructed_tensor, _, _ = model(real_profile_tensor)
+        
+    synthetic_profile_scaled = reconstructed_tensor.view(num_profile_points, features).cpu().numpy()
 
-    synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
+    real_profile_unscaled = np.zeros_like(real_profile_scaled)
+    synthetic_profile_unscaled = np.zeros_like(synthetic_profile_scaled)
 
     for i, feature_name in enumerate(profile_features):
-        unscaled_col = scalers[feature_name].inverse_transform(pd.DataFrame(synthetic_profile[:, i], columns=[feature_name]))
-        synthetic_profile[:, i] = unscaled_col.flatten()
+        real_profile_unscaled[:, i] = scalers[feature_name].inverse_transform(
+            pd.DataFrame(real_profile_scaled[:, i], columns=[feature_name])
+        ).flatten()
+        
+        synthetic_profile_unscaled[:, i] = scalers[feature_name].inverse_transform(
+            pd.DataFrame(synthetic_profile_scaled[:, i], columns=[feature_name])
+        ).flatten()
 
     num_subplots = max(1, features - 1)
     fig, axes = plt.subplots(1, num_subplots, figsize=(8 * num_subplots, 6))
@@ -244,8 +279,8 @@ def plot_profile_reconstruction(
         feature_y = profile_features[i]
         ax = axes[i - 1]
         
-        ax.plot(real_profile[:, 0], real_profile[:, i], label="Real Profile", color="black", linewidth=2.5)
-        ax.plot(synthetic_profile[:, 0], synthetic_profile[:, i], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+        ax.plot(real_profile_unscaled[:, 0], real_profile_unscaled[:, i], label="Real Profile", color="black", linewidth=2.5)
+        ax.plot(synthetic_profile_unscaled[:, 0], synthetic_profile_unscaled[:, i], label="Synthetic Profile", color="#ff7f0e", marker="o", markersize=4, linestyle="None", alpha=0.8)
         
         ax.set_title(f"{feature_y} vs {feature_x}", fontsize=18)
         ax.set_xlabel(feature_x, fontsize=16) 
@@ -377,11 +412,24 @@ def _plot_mse_distribution(mses):
     plt.tight_layout()
     plt.show()
 
-def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_examples=3):
+def evaluate_reconstruction_variance(
+    data, 
+    model=None, 
+    dataloader=None, 
+    device=None, 
+    num_examples=3, 
+    split="test"
+):
     """
     Computes per-sample MSE, sorts the distributions, and renders a diagnostic matrix 
     comparing the best, worst, and average reconstructions.
     """
+    if model is None or dataloader is None or device is None:
+        d_model, d_loader, d_device = _get_default_model_and_loader(data, split)
+        model = model or d_model
+        dataloader = dataloader or d_loader
+        device = device or d_device
+
     model.eval()
     all_originals = []
     all_reconstructions = []
@@ -389,37 +437,31 @@ def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_exampl
 
     with torch.no_grad():
         for batch in dataloader:
-            # Handle dataloaders that yield (data, target) or just data
             x = batch[0] if isinstance(batch, (list, tuple)) else batch
             x = x.to(device)
             
-            # Flatten [batch_size, 60, 2] -> [batch_size, 120]
             x_flat = x.view(x.size(0), -1)
             
             recon, _, _ = model(x_flat)
             
-            # Compute MSE per sample: reduce along feature dimension, retain batch dimension
             mse_per_sample = F.mse_loss(recon, x_flat, reduction='none').mean(dim=1)
             
             all_originals.append(x_flat.cpu())
             all_reconstructions.append(recon.cpu())
             all_mses.append(mse_per_sample.cpu())
 
-    # Aggregate tensors
     originals = torch.cat(all_originals, dim=0).numpy()
     reconstructions = torch.cat(all_reconstructions, dim=0).numpy()
     mses = torch.cat(all_mses, dim=0).numpy()
 
     _plot_mse_distribution(mses)
 
-    # Sort indices by error magnitude
     sorted_indices = np.argsort(mses)
     
     total_samples = len(sorted_indices)
     best_indices = sorted_indices[:num_examples]
     worst_indices = sorted_indices[-num_examples:]
     
-    # Extract median bounds
     mid_point = total_samples // 2
     half_window = num_examples // 2
     avg_indices = sorted_indices[mid_point - half_window : mid_point - half_window + num_examples]
@@ -431,7 +473,6 @@ def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_exampl
     ]
 
     _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples)
-
 
 def _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples):
     """

@@ -25,7 +25,10 @@ def vae_loss_function(reconstructed, original, mu, logvar, beta=beta_value):
 
 
 def train_model(data, model="VAE", beta=beta_value, verbose=True):
-    train_loader, val_loader, test_loader = get_dataloaders(data, condition_cols=[2])
+    from src.config import profile_features
+    condition_index = [len(profile_features)]
+    
+    train_loader, val_loader, test_loader = get_dataloaders(data, condition_cols=condition_index)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if verbose:
@@ -152,12 +155,6 @@ def train_model(data, model="VAE", beta=beta_value, verbose=True):
             print(f"Restored optimum matrix state mapping to Validation Loss: {best_val_loss:.4f}")
 
     save_model(model, verbose=verbose)
-
-    evaluate_reconstruction_variance(
-        model=model, 
-        dataloader=val_loader, 
-        device=device
-    )
 
     return metrics
 
