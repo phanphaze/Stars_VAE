@@ -4,12 +4,12 @@ from pathlib import Path
 # Hyperparameters
 
 # rdp preprocessing attributes
-profile_features = ['mass', 'logT'] #features to be used for training
+profile_features = ['mass', 'logT', 'logP', 'luminosity'] #features to be used for training
 split_feature = 'star_age'
 num_profile_points = 60
 
 # train attributes
-Learning_rate = 1e-4
+Learning_rate = 1e-6
 batch_size = 128
 num_epochs = 1000
 train_test_split = 0.8
@@ -22,7 +22,7 @@ lambda_value = 1 #weight of MSE divergence
 
 
 # early stopping attributes
-early_stopping_patience = 30 #number of epochs to wait for improvement before stopping
+early_stopping_patience = num_epochs #number of epochs to wait for improvement before stopping
 early_stopping_min_delta = 1 #minimum change in loss to qualify as an improvement
 
 # model attributes

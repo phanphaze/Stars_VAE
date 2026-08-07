@@ -1,15 +1,9 @@
-# File for loading data into the training loop
-
-from __future__ import annotations
-
-from pathlib import Path
 from typing import Optional, Sequence, Tuple
-
+from pathlib import Path
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split
-
-from src.config import batch_size, processed_data_path, train_test_split
+from torch.utils.data import Dataset, DataLoader, random_split
+from src.config import batch_size, processed_data_path, train_test_split, num_profile_points
 
 
 class ProcessedDataset(Dataset):
@@ -17,16 +11,21 @@ class ProcessedDataset(Dataset):
         self,
         data: np.ndarray,
         condition_cols: Optional[Sequence[int]] = None,
+        num_points: int = num_profile_points,
     ) -> None:
-        self.data = data.astype(np.float32)
+        # Enforce exact profile grouping (60 points per star)
+        num_profiles = data.shape[0] // num_points
+        self.data = data[:num_profiles * num_points].reshape(num_profiles, num_points, -1).astype(np.float32)
+        
         self.condition_cols = tuple(condition_cols or [])
         self.feature_cols = tuple(
-            i for i in range(self.data.shape[1]) if i not in self.condition_cols
+            i for i in range(self.data.shape[2]) if i not in self.condition_cols
         )
 
-        self.inputs = torch.from_numpy(self.data[:, self.feature_cols])
+        self.inputs = torch.from_numpy(self.data[:, :, self.feature_cols])
+        
         if len(self.condition_cols) > 0:
-            self.conditions = torch.from_numpy(self.data[:, self.condition_cols])
+            self.conditions = torch.from_numpy(self.data[:, 0, self.condition_cols])
         else:
             self.conditions = torch.zeros(
                 (len(self.data), 0), dtype=torch.float32
@@ -35,8 +34,15 @@ class ProcessedDataset(Dataset):
     def __len__(self) -> int:
         return len(self.inputs)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.inputs[idx], self.conditions[idx]
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        inputs = self.inputs[idx]
+        conditions = self.conditions[idx]
+        
+        # Extract auxiliary physics columns for this profile
+        aux_cols = [i for i in range(self.data.shape[2]) if i not in self.feature_cols and i not in self.condition_cols]
+        aux_data = torch.from_numpy(self.data[idx, :, aux_cols])
+        
+        return inputs, conditions, aux_data
 
 
 def load_processed_data(path: Path | str = processed_data_path) -> np.ndarray:
@@ -74,7 +80,7 @@ def get_dataloaders(
     generator = torch.Generator().manual_seed(seed)
     splits = random_split(
         dataset, [train_size, val_size, test_size], generator=generator
-)
+    )
     train_dataset, val_dataset, test_dataset = splits
 
     train_loader = DataLoader(

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 import torch
+import torch.nn.functional as F
 import unittest
 import pandas as pd
 from unittest.mock import patch
@@ -17,14 +18,10 @@ from src.model import VAE
 from src.dataset import get_dataloaders
 
 # Saves the model state dictionary to disk.
-def save_model(model):
-    model_save_dir.mkdir(parents=True, exist_ok=True)
-    filename = "variational_autoencoder.pth"
-    save_path = model_save_dir / filename
-    
-    torch.save(model.state_dict(), save_path)
-    print(f"Model saved to: {save_path}")
-
+def save_model(model, path="model.pth", verbose=True):
+    torch.save(model.state_dict(), path)
+    if verbose:
+        print(f"Model successfully saved to {path}")
 
 def varify_rdp(df, processed_df):
     # Extract the profiles directly from the RAW dataframe to keep the scale consistent
@@ -191,6 +188,28 @@ def generate_stellar_profiles(model_path, num_samples=1):
     generated_profiles = generated_flat.view(num_samples, num_profile_points, num_features)
     
     return generated_profiles.cpu().numpy()
+
+def evaluate_reconstruction_variance(model, dataloader, device):
+    """Evaluates and prints the reconstruction variance over a dataloader."""
+    model.eval()
+    mse_list = []
+    with torch.no_grad():
+        for batch in dataloader:
+            # Handle different batch unpacking structures
+            if len(batch) == 3:
+                data, _, _ = batch
+            else:
+                data, _ = batch
+                
+            data = data.to(device)
+            data_flat = data.view(data.size(0), -1)
+            reconstructed, _, _ = model(data_flat)
+            mse = F.mse_loss(reconstructed, data_flat, reduction="mean")
+            mse_list.append(mse.item())
+            
+    avg_mse = sum(mse_list) / len(mse_list) if mse_list else 0.0
+    print(f"Validation Reconstruction Variance (MSE): {avg_mse:.6f}")
+    return avg_mse
 
 
 '''Test class for RDP Algorithm'''
