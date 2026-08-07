@@ -195,13 +195,13 @@ def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
 
 def plot_profile_reconstruction(
     scalers, 
-    title="Stellar Thermodynamic Profile",
+    title="Test Set Profile Reconstruction",
     model_path=model_save_dir / "variational_autoencoder.pth", 
     points=num_profile_points
 ):
     """
     Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
-    Scales dynamically to n-dimensional feature configurations.
+    Scales dynamically to n-dimensional feature configurations via subplot arrays.
     """
     from src.config import profile_features
     features = len(profile_features)
@@ -211,11 +211,10 @@ def plot_profile_reconstruction(
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # Dynamic condition extraction
-    _, val_loader, _ = get_dataloaders(condition_cols=[features])
-    real_profile = next(iter(val_loader))[0][0].numpy()
+    # Isolate the test loader sequence for final evaluation
+    _, _, test_loader = get_dataloaders(condition_cols=[features])
+    real_profile = next(iter(test_loader))[0][0].numpy()
 
-    # Dynamic scaling for n-dimensional inputs
     scaled_features = []
     for i, feature_name in enumerate(profile_features):
         scaled_col = scalers[feature_name].transform(pd.DataFrame(real_profile[:, i], columns=[feature_name]))
@@ -229,50 +228,59 @@ def plot_profile_reconstruction(
 
     synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
 
-    # Dynamic unscaling for n-dimensional outputs
     for i, feature_name in enumerate(profile_features):
         unscaled_col = scalers[feature_name].inverse_transform(pd.DataFrame(synthetic_profile[:, i], columns=[feature_name]))
         synthetic_profile[:, i] = unscaled_col.flatten()
 
-    # Restrict Cartesian plot to primary features (index 0 and 1)
+    num_subplots = max(1, features - 1)
+    fig, axes = plt.subplots(1, num_subplots, figsize=(8 * num_subplots, 6))
+    
+    if num_subplots == 1:
+        axes = [axes]
+        
     feature_x = profile_features[0]
-    feature_y = profile_features[1]
-
-    fig, ax = plt.subplots(figsize=(10, 8))
     
-    ax.plot(real_profile[:, 0], real_profile[:, 1], label="Real Profile", color="black", linewidth=2.5)
-    ax.plot(synthetic_profile[:, 0], synthetic_profile[:, 1], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+    for i in range(1, features):
+        feature_y = profile_features[i]
+        ax = axes[i - 1]
+        
+        ax.plot(real_profile[:, 0], real_profile[:, i], label="Real Profile", color="black", linewidth=2.5)
+        ax.plot(synthetic_profile[:, 0], synthetic_profile[:, i], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+        
+        ax.set_title(f"{feature_y} vs {feature_x}", fontsize=18)
+        ax.set_xlabel(feature_x, fontsize=16) 
+        ax.set_ylabel(feature_y, fontsize=16)
+        
+        ax.grid(True, which="both", linestyle="--", alpha=0.6)
+        ax.legend(fontsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
     
-    ax.set_title(title, fontsize=18)
-    ax.set_xlabel(feature_x, fontsize=16) 
-    ax.set_ylabel(feature_y, fontsize=16)
-    
-    ax.grid(True, which="both", linestyle="--", alpha=0.6)
-    ax.legend(fontsize=14)
-    ax.tick_params(axis='both', which='major', labelsize=14)
-    
+    plt.suptitle(title, fontsize=22, y=1.05)
     plt.tight_layout()
     plt.show()
 
     
 # used for visualizing the latent space of the VAE model. Uses pca for interpretability and tsne for more accurate clustering.
 def visualize_latent_space(
-    reduction_method="tsne", #t-distributed Stochastic Neighbor Embedding
+    reduction_method="tsne",
     sample_limit=5000,
     model_path=model_save_dir / "variational_autoencoder.pth"
 ):
     """
     Extracts and projects the VAE latent space into 2D for physical poster visualization.
     """
+    from src.config import profile_features
+    features = len(profile_features)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Instantiate and load the VAE architecture
     model = VAE().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # Retrieve validation data, isolating star_age using condition_cols=[2]
-    _, val_loader, _ = get_dataloaders(condition_cols=[2])
+    # Dynamic condition extraction
+    _, val_loader, _ = get_dataloaders(condition_cols=[features])
 
     latent_vectors = []
     condition_values = []
@@ -280,25 +288,20 @@ def visualize_latent_space(
     with torch.no_grad():
         for data, condition in val_loader:
             data = data.to(device)
-            
-            # Flatten input to match VAE encoder dimension requirements
             data_flat = data.view(data.size(0), -1)
             
             mu, _ = model.encode(data_flat)
             latent_vectors.append(mu.cpu().numpy())
             condition_values.append(condition.cpu().numpy())
 
-    # Consolidate batch arrays
     latent_vectors = np.concatenate(latent_vectors, axis=0)
     condition_values = np.concatenate(condition_values, axis=0).flatten()
 
-    # Apply random sampling threshold to mitigate visual overplotting density
     if len(latent_vectors) > sample_limit:
         indices = np.random.choice(len(latent_vectors), sample_limit, replace=False)
         latent_vectors = latent_vectors[indices]
         condition_values = condition_values[indices]
 
-    # Execute geometric dimension reduction mapping
     if reduction_method.lower() == "tsne":
         reducer = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
     else:
@@ -306,7 +309,6 @@ def visualize_latent_space(
         
     latent_2d = reducer.fit_transform(latent_vectors)
 
-    # Apply high-legibility typographic overrides for physical print
     plt.rcParams.update({
         "font.size": 18,
         "axes.titlesize": 24,
@@ -318,7 +320,6 @@ def visualize_latent_space(
 
     fig, ax = plt.subplots(figsize=(12, 10))
 
-    # Render spatial coordinates utilizing the perceptually uniform 'viridis' colormap
     scatter = ax.scatter(
         latent_2d[:, 0], 
         latent_2d[:, 1], 
@@ -330,7 +331,6 @@ def visualize_latent_space(
         linewidth=0.5
     )
 
-    # Configure scaled colorbar relative to extracted conditional values
     cbar = plt.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Star Age (Normalized)", rotation=270, labelpad=30)
 
