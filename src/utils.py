@@ -42,25 +42,41 @@ def varify_rdp(df, processed_df):
     original_profile = raw_profiles[profile_idx][profile_features].to_numpy()
 
     # Isolate matching reduced profile from the final output matrix
-    # We use np.isclose instead of '==' for safer float comparisons
     mask = np.isclose(processed_df[:, -1], target_split_val_raw)
     reduced_profile = processed_df[mask][:, :-1]
 
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    plt.plot(original_profile[:, 0], original_profile[:, 1], label='Original', color='blue', alpha=0.4, marker='.')
+    num_feats = len(profile_features)
+    num_subplots = max(1, num_feats - 1)
+    
+    # Establish dynamic figure scaling based on feature count
+    fig, axes = plt.subplots(1, num_subplots, figsize=(7 * num_subplots, 6))
+    
+    # Enforce iterable array architecture for single-subplot generation
+    if num_subplots == 1:
+        axes = [axes]
 
-    # Quick safety check to ensure points were found before plotting
-    if len(reduced_profile) > 0:
-        plt.plot(reduced_profile[:, 0], reduced_profile[:, 1], label='RDP Reduced', color='red', marker='x', linestyle='--')
-    else:
-        print(f"Warning: No reduced points found for age {target_split_val_raw}")
+    for i in range(1, num_feats):
+        ax = axes[i - 1]
+        
+        ax.plot(original_profile[:, 0], original_profile[:, i], label='Original', color='blue', alpha=0.4, marker='.')
+        
+        if len(reduced_profile) > 0:
+            ax.plot(reduced_profile[:, 0], reduced_profile[:, i], label='RDP Reduced', color='red', marker='x', linestyle='--')
+        else:
+            if i == 1:
+                print(f"Warning: No reduced points found for age {target_split_val_raw}")
+                
+        ax.set_title(f"{profile_features[i]} vs {profile_features[0]}", fontsize=16)
+        ax.set_xlabel(profile_features[0], fontsize=14)
+        ax.set_ylabel(profile_features[i], fontsize=14)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend()
+        ax.grid(True, linestyle="--", alpha=0.6)
 
-    plt.title(f"RDP Reduction Verification (Age: {target_split_val_raw:.2e})", fontsize=20)
-    plt.xlabel(profile_features[0], fontsize=14)
-    plt.ylabel(profile_features[1], fontsize=14)
-    plt.legend()
-    plt.grid(True)
+    plt.suptitle(f"RDP Reduction Verification (Age: {target_split_val_raw:.2e})", fontsize=20)
+    plt.tight_layout()
     plt.show()
 
 def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
@@ -181,32 +197,31 @@ def plot_profile_reconstruction(
     scalers, 
     title="Stellar Thermodynamic Profile",
     model_path=model_save_dir / "variational_autoencoder.pth", 
-    points=num_profile_points, 
-    features=len(profile_features)
+    points=num_profile_points
 ):
     """
     Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
-    Automatically retrieves validation data. Requires only fitted scalers. Architecture instantiation 
-    and hardware allocation are encapsulated.
+    Scales dynamically to n-dimensional feature configurations.
     """
+    from src.config import profile_features
+    features = len(profile_features)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     model = VAE().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # Retrieve ground truth profile directly from the validation loader
-    _, val_loader, _ = get_dataloaders(condition_cols=[2])
+    # Dynamic condition extraction
+    _, val_loader, _ = get_dataloaders(condition_cols=[features])
     real_profile = next(iter(val_loader))[0][0].numpy()
 
-    # Dynamically assign feature names from config
-    feature_x = profile_features[0]
-    feature_y = profile_features[1]
-
-    scaled_real_x = scalers[feature_x].transform(pd.DataFrame(real_profile[:, 0], columns=[feature_x]))
-    scaled_real_y = scalers[feature_y].transform(pd.DataFrame(real_profile[:, 1], columns=[feature_y]))
-    scaled_real_profile = np.hstack((scaled_real_x, scaled_real_y))
-
+    # Dynamic scaling for n-dimensional inputs
+    scaled_features = []
+    for i, feature_name in enumerate(profile_features):
+        scaled_col = scalers[feature_name].transform(pd.DataFrame(real_profile[:, i], columns=[feature_name]))
+        scaled_features.append(scaled_col)
+        
+    scaled_real_profile = np.hstack(scaled_features)
     real_profile_flat = torch.from_numpy(scaled_real_profile).float().view(1, -1).to(device)
     
     with torch.no_grad():
@@ -214,11 +229,14 @@ def plot_profile_reconstruction(
 
     synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
 
-    unscaled_x = scalers[feature_x].inverse_transform(pd.DataFrame(synthetic_profile[:, 0], columns=[feature_x]))
-    unscaled_y = scalers[feature_y].inverse_transform(pd.DataFrame(synthetic_profile[:, 1], columns=[feature_y]))
+    # Dynamic unscaling for n-dimensional outputs
+    for i, feature_name in enumerate(profile_features):
+        unscaled_col = scalers[feature_name].inverse_transform(pd.DataFrame(synthetic_profile[:, i], columns=[feature_name]))
+        synthetic_profile[:, i] = unscaled_col.flatten()
 
-    synthetic_profile[:, 0] = unscaled_x.flatten()
-    synthetic_profile[:, 1] = unscaled_y.flatten()
+    # Restrict Cartesian plot to primary features (index 0 and 1)
+    feature_x = profile_features[0]
+    feature_y = profile_features[1]
 
     fig, ax = plt.subplots(figsize=(10, 8))
     
@@ -226,8 +244,6 @@ def plot_profile_reconstruction(
     ax.plot(synthetic_profile[:, 0], synthetic_profile[:, 1], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
     
     ax.set_title(title, fontsize=18)
-    
-    # Map labels to configuration array
     ax.set_xlabel(feature_x, fontsize=16) 
     ax.set_ylabel(feature_y, fontsize=16)
     
@@ -238,6 +254,7 @@ def plot_profile_reconstruction(
     plt.tight_layout()
     plt.show()
 
+    
 # used for visualizing the latent space of the VAE model. Uses pca for interpretability and tsne for more accurate clustering.
 def visualize_latent_space(
     reduction_method="tsne", #t-distributed Stochastic Neighbor Embedding
@@ -327,6 +344,39 @@ def visualize_latent_space(
 
     return fig, ax
 
+def _plot_mse_distribution(mses):
+    """
+    Renders a histogram of the MSE distribution to diagnose normality and outlier structures.
+    """
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.size": 14,
+        "axes.titlesize": 18,
+        "axes.labelsize": 16,
+    })
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    ax.hist(mses, bins=50, color='#1f77b4', edgecolor='black', alpha=0.75)
+    
+    median_mse = np.median(mses)
+    mean_mse = np.mean(mses)
+    
+    ax.axvline(median_mse, color='#ff7f0e', linestyle='--', linewidth=2.5, label=f'Median: {median_mse:.4f}')
+    ax.axvline(mean_mse, color='#d62728', linestyle='-', linewidth=2.5, label=f'Mean: {mean_mse:.4f}')
+    
+    ax.set_title("Profile Reconstruction Error Distribution (MSE)")
+    ax.set_xlabel("Mean Squared Error")
+    ax.set_ylabel("Frequency")
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+    ax.legend(frameon=True, framealpha=0.9)
+    
+    plt.tight_layout()
+    plt.show()
+
 def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_examples=3):
     """
     Computes per-sample MSE, sorts the distributions, and renders a diagnostic matrix 
@@ -359,6 +409,8 @@ def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_exampl
     originals = torch.cat(all_originals, dim=0).numpy()
     reconstructions = torch.cat(all_reconstructions, dim=0).numpy()
     mses = torch.cat(all_mses, dim=0).numpy()
+
+    _plot_mse_distribution(mses)
 
     # Sort indices by error magnitude
     sorted_indices = np.argsort(mses)
