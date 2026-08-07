@@ -192,87 +192,137 @@ def plot_loss_curve(metrics, log_scale=True, figsize=(16, 6)):
     fig.tight_layout()
     return fig, (ax1, ax2)
 
-
-def plot_profile_reconstruction(
-    scalers, 
-    title="Stellar Thermodynamic Profile",
-    model_path=model_save_dir / "variational_autoencoder.pth", 
-    points=num_profile_points
-):
+def _get_default_model_and_loader(data, split="test"):
     """
-    Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
-    Scales dynamically to n-dimensional feature configurations.
+    Automatically instantiates the VAE architecture, loads terminal matrix states,
+    and isolates the requested data partition.
     """
-    from src.config import profile_features
+    from src.model import VAE
+    from src.dataset import get_dataloaders
+    from src.config import profile_features, model_save_dir
+    import torch
+    
     features = len(profile_features)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     model = VAE().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_save_dir / "variational_autoencoder.pth", map_location=device))
     model.eval()
 
-    # Dynamic condition extraction
-    _, val_loader, _ = get_dataloaders(condition_cols=[features])
-    real_profile = next(iter(val_loader))[0][0].numpy()
-
-    # Dynamic scaling for n-dimensional inputs
-    scaled_features = []
-    for i, feature_name in enumerate(profile_features):
-        scaled_col = scalers[feature_name].transform(pd.DataFrame(real_profile[:, i], columns=[feature_name]))
-        scaled_features.append(scaled_col)
+    train_loader, val_loader, test_loader = get_dataloaders(data=data, condition_cols=[features])
+    
+    if split == "test":
+        loader = test_loader
+    elif split == "val":
+        loader = val_loader
+    else:
+        loader = train_loader
         
-    scaled_real_profile = np.hstack(scaled_features)
-    real_profile_flat = torch.from_numpy(scaled_real_profile).float().view(1, -1).to(device)
+    return model, loader, device
+
+
+def plot_profile_reconstruction(
+    data,
+    scalers, 
+    title="Test Set Profile Reconstruction",
+    model=None,
+    dataloader=None,
+    split="test"
+):
+    """
+    Executes a deterministic reconstruction of a physical profile and renders a comparative visualization.
+    Scales dynamically to n-dimensional feature configurations via subplot arrays.
+    """
+    from src.config import profile_features, num_profile_points
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
+    import torch
+    
+    features = len(profile_features)
+
+    if model is None or dataloader is None:
+        d_model, d_loader, _ = _get_default_model_and_loader(data, split)
+        model = model or d_model
+        dataloader = dataloader or d_loader
+
+    device = next(model.parameters()).device
+    model.eval()
+    
+    batch = next(iter(dataloader))
+    real_profile_scaled = batch[0][0].numpy()
+    
+    real_profile_tensor = torch.from_numpy(real_profile_scaled).float().view(1, -1).to(device)
     
     with torch.no_grad():
-        reconstructed_flat, _, _ = model(real_profile_flat)
+        reconstructed_tensor, _, _ = model(real_profile_tensor)
+        
+    synthetic_profile_scaled = reconstructed_tensor.view(num_profile_points, features).cpu().numpy()
 
-    synthetic_profile = reconstructed_flat.view(points, features).cpu().numpy()
+    real_profile_unscaled = np.zeros_like(real_profile_scaled)
+    synthetic_profile_unscaled = np.zeros_like(synthetic_profile_scaled)
 
-    # Dynamic unscaling for n-dimensional outputs
     for i, feature_name in enumerate(profile_features):
-        unscaled_col = scalers[feature_name].inverse_transform(pd.DataFrame(synthetic_profile[:, i], columns=[feature_name]))
-        synthetic_profile[:, i] = unscaled_col.flatten()
+        real_profile_unscaled[:, i] = scalers[feature_name].inverse_transform(
+            pd.DataFrame(real_profile_scaled[:, i], columns=[feature_name])
+        ).flatten()
+        
+        synthetic_profile_unscaled[:, i] = scalers[feature_name].inverse_transform(
+            pd.DataFrame(synthetic_profile_scaled[:, i], columns=[feature_name])
+        ).flatten()
 
-    # Restrict Cartesian plot to primary features (index 0 and 1)
+    num_subplots = max(1, features - 1)
+    fig, axes = plt.subplots(1, num_subplots, figsize=(8 * num_subplots, 6))
+    
+    # Enforce iterable array architecture for single-subplot generation
+    if num_subplots == 1:
+        axes = [axes]
+    elif hasattr(axes, "flatten"):
+        axes = axes.flatten()
+        
     feature_x = profile_features[0]
-    feature_y = profile_features[1]
-
-    fig, ax = plt.subplots(figsize=(10, 8))
     
-    ax.plot(real_profile[:, 0], real_profile[:, 1], label="Real Profile", color="black", linewidth=2.5)
-    ax.plot(synthetic_profile[:, 0], synthetic_profile[:, 1], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+    for i in range(1, features):
+        feature_y = profile_features[i]
+        ax = axes[i - 1]
+        
+        ax.plot(real_profile_unscaled[:, 0], real_profile_unscaled[:, i], label="Real Profile", color="black", linewidth=2.5)
+        ax.plot(synthetic_profile_unscaled[:, 0], synthetic_profile_unscaled[:, i], label="Synthetic Profile", color="#ff7f0e", linestyle="--", linewidth=2.5)
+        
+        ax.set_title(f"{feature_y} vs {feature_x}", fontsize=18)
+        ax.set_xlabel(feature_x, fontsize=16) 
+        ax.set_ylabel(feature_y, fontsize=16)
+        
+        ax.grid(True, which="both", linestyle="--", alpha=0.6)
+        ax.legend(fontsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
     
-    ax.set_title(title, fontsize=18)
-    ax.set_xlabel(feature_x, fontsize=16) 
-    ax.set_ylabel(feature_y, fontsize=16)
-    
-    ax.grid(True, which="both", linestyle="--", alpha=0.6)
-    ax.legend(fontsize=14)
-    ax.tick_params(axis='both', which='major', labelsize=14)
-    
+    plt.suptitle(title, fontsize=22, y=1.05)
     plt.tight_layout()
     plt.show()
 
     
 # used for visualizing the latent space of the VAE model. Uses pca for interpretability and tsne for more accurate clustering.
 def visualize_latent_space(
-    reduction_method="tsne", #t-distributed Stochastic Neighbor Embedding
+    reduction_method="tsne",
     sample_limit=5000,
     model_path=model_save_dir / "variational_autoencoder.pth"
 ):
     """
     Extracts and projects the VAE latent space into 2D for physical poster visualization.
     """
+    from src.config import profile_features
+    features = len(profile_features)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Instantiate and load the VAE architecture
     model = VAE().to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # Retrieve validation data, isolating star_age using condition_cols=[2]
-    _, val_loader, _ = get_dataloaders(condition_cols=[2])
+    # Dynamic condition extraction
+    _, val_loader, _ = get_dataloaders(condition_cols=[features])
 
     latent_vectors = []
     condition_values = []
@@ -280,25 +330,20 @@ def visualize_latent_space(
     with torch.no_grad():
         for data, condition in val_loader:
             data = data.to(device)
-            
-            # Flatten input to match VAE encoder dimension requirements
             data_flat = data.view(data.size(0), -1)
             
             mu, _ = model.encode(data_flat)
             latent_vectors.append(mu.cpu().numpy())
             condition_values.append(condition.cpu().numpy())
 
-    # Consolidate batch arrays
     latent_vectors = np.concatenate(latent_vectors, axis=0)
     condition_values = np.concatenate(condition_values, axis=0).flatten()
 
-    # Apply random sampling threshold to mitigate visual overplotting density
     if len(latent_vectors) > sample_limit:
         indices = np.random.choice(len(latent_vectors), sample_limit, replace=False)
         latent_vectors = latent_vectors[indices]
         condition_values = condition_values[indices]
 
-    # Execute geometric dimension reduction mapping
     if reduction_method.lower() == "tsne":
         reducer = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
     else:
@@ -306,7 +351,6 @@ def visualize_latent_space(
         
     latent_2d = reducer.fit_transform(latent_vectors)
 
-    # Apply high-legibility typographic overrides for physical print
     plt.rcParams.update({
         "font.size": 18,
         "axes.titlesize": 24,
@@ -318,7 +362,6 @@ def visualize_latent_space(
 
     fig, ax = plt.subplots(figsize=(12, 10))
 
-    # Render spatial coordinates utilizing the perceptually uniform 'viridis' colormap
     scatter = ax.scatter(
         latent_2d[:, 0], 
         latent_2d[:, 1], 
@@ -330,7 +373,6 @@ def visualize_latent_space(
         linewidth=0.5
     )
 
-    # Configure scaled colorbar relative to extracted conditional values
     cbar = plt.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Star Age (Normalized)", rotation=270, labelpad=30)
 
@@ -377,11 +419,24 @@ def _plot_mse_distribution(mses):
     plt.tight_layout()
     plt.show()
 
-def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_examples=3):
+def evaluate_reconstruction_variance(
+    data, 
+    model=None, 
+    dataloader=None, 
+    device=None, 
+    num_examples=3, 
+    split="test"
+):
     """
     Computes per-sample MSE, sorts the distributions, and renders a diagnostic matrix 
     comparing the best, worst, and average reconstructions.
     """
+    if model is None or dataloader is None or device is None:
+        d_model, d_loader, d_device = _get_default_model_and_loader(data, split)
+        model = model or d_model
+        dataloader = dataloader or d_loader
+        device = device or d_device
+
     model.eval()
     all_originals = []
     all_reconstructions = []
@@ -389,37 +444,31 @@ def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_exampl
 
     with torch.no_grad():
         for batch in dataloader:
-            # Handle dataloaders that yield (data, target) or just data
             x = batch[0] if isinstance(batch, (list, tuple)) else batch
             x = x.to(device)
             
-            # Flatten [batch_size, 60, 2] -> [batch_size, 120]
             x_flat = x.view(x.size(0), -1)
             
             recon, _, _ = model(x_flat)
             
-            # Compute MSE per sample: reduce along feature dimension, retain batch dimension
             mse_per_sample = F.mse_loss(recon, x_flat, reduction='none').mean(dim=1)
             
             all_originals.append(x_flat.cpu())
             all_reconstructions.append(recon.cpu())
             all_mses.append(mse_per_sample.cpu())
 
-    # Aggregate tensors
     originals = torch.cat(all_originals, dim=0).numpy()
     reconstructions = torch.cat(all_reconstructions, dim=0).numpy()
     mses = torch.cat(all_mses, dim=0).numpy()
 
     _plot_mse_distribution(mses)
 
-    # Sort indices by error magnitude
     sorted_indices = np.argsort(mses)
     
     total_samples = len(sorted_indices)
     best_indices = sorted_indices[:num_examples]
     worst_indices = sorted_indices[-num_examples:]
     
-    # Extract median bounds
     mid_point = total_samples // 2
     half_window = num_examples // 2
     avg_indices = sorted_indices[mid_point - half_window : mid_point - half_window + num_examples]
@@ -431,7 +480,6 @@ def evaluate_reconstruction_variance(model, dataloader, device='cpu', num_exampl
     ]
 
     _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples)
-
 
 def _render_diagnostic_grid(originals, reconstructions, mses, categories, num_examples):
     """
